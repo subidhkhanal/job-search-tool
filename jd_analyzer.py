@@ -1,9 +1,11 @@
 """
-JD Analyzer — NOC compatibility check, skill match scoring, red flag detection.
+JD Analyzer — NOC compatibility check, skill match scoring, red flag detection,
+ATS resume compatibility check.
 Used both in the Streamlit UI (full analysis) and in nightly.py (quick verdict).
 """
 
 import re
+from datetime import datetime, timedelta
 
 # --- NOC Codes relevant to tech roles ---
 NOC_CODES = {
@@ -72,6 +74,279 @@ MY_SKILLS = {
 }
 
 ALL_MY_SKILLS = MY_SKILLS["high"] + MY_SKILLS["medium"] + MY_SKILLS["low"]
+
+
+# --- ATS Synonym Groups ---
+SYNONYM_GROUPS = [
+    {"js", "javascript", "ecmascript"},
+    {"ts", "typescript"},
+    {"node", "node.js", "nodejs"},
+    {"react", "react.js", "reactjs"},
+    {"next", "next.js", "nextjs"},
+    {"vue", "vue.js", "vuejs"},
+    {"express", "express.js", "expressjs"},
+    {"fastapi", "fast api"},
+    {"scikit-learn", "sklearn", "scikit learn"},
+    {"langchain", "lang chain"},
+    {"langgraph", "lang graph"},
+    {"hugging face", "huggingface", "hf"},
+    {"ml", "machine learning"},
+    {"dl", "deep learning"},
+    {"nlp", "natural language processing"},
+    {"cv", "computer vision"},
+    {"gen ai", "generative ai", "genai"},
+    {"llm", "large language model", "large language models"},
+    {"rag", "retrieval augmented generation", "retrieval-augmented generation"},
+    {"ai agent", "agentic ai", "agentic"},
+    {"k8s", "kubernetes"},
+    {"aws", "amazon web services"},
+    {"gcp", "google cloud", "google cloud platform"},
+    {"azure", "microsoft azure"},
+    {"ci/cd", "cicd", "ci cd", "continuous integration"},
+    {"terraform", "tf", "infrastructure as code"},
+    {"postgres", "postgresql"},
+    {"mongo", "mongodb"},
+    {"chromadb", "chroma", "chroma db"},
+    {"elastic", "elasticsearch", "elastic search"},
+    {"rabbitmq", "rabbit mq"},
+    {"golang", "go lang"},
+    {"c#", "csharp", "c sharp"},
+    {"c++", "cpp"},
+    {"rest api", "restful api", "rest apis", "restful"},
+    {"graphql", "graph ql"},
+    {"docker", "containerization", "containers"},
+    {"git", "version control"},
+    {"sql", "structured query language"},
+    {"html", "html5"},
+    {"css", "css3"},
+    {"tailwind", "tailwind css", "tailwindcss"},
+    {"sass", "scss"},
+    {"selenium", "web automation"},
+    {"etl", "extract transform load"},
+    {"airflow", "apache airflow"},
+    {"spark", "apache spark", "pyspark"},
+    {"kafka", "apache kafka"},
+    {"pinecone", "pinecone db"},
+    {"weaviate", "weaviate db"},
+    {"cohere", "cohere api"},
+    {"openai", "openai api"},
+]
+
+_SYNONYM_LOOKUP = {}
+for _group in SYNONYM_GROUPS:
+    _frozen = frozenset(_group)
+    for _term in _group:
+        _SYNONYM_LOOKUP[_term] = _frozen
+
+
+def _expand_synonyms(term):
+    """Return all known synonyms for a term, including itself."""
+    return _SYNONYM_LOOKUP.get(term.lower(), frozenset({term.lower()}))
+
+
+# --- ATS Requirement Extraction Patterns ---
+_EXPERIENCE_PATTERNS = [
+    re.compile(
+        r"(?:minimum|at\s+least|min\.?)?\s*(\d+)\s*[\+\-]?\s*(?:to\s+\d+\s+)?years?\s+"
+        r"(?:of\s+)?(?:experience|exp\.?|work\s+experience)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(\d+)\s*\+?\s*yrs?\s+(?:of\s+)?(?:experience|exp\.?)", re.IGNORECASE),
+]
+
+_DEGREE_PATTERNS = [
+    re.compile(
+        r"(?:bachelor'?s?|b\.?s\.?|b\.?tech|b\.?e\.?)\s*(?:degree)?\s*(?:in\s+)?",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:master'?s?|m\.?s\.?|m\.?tech|m\.?e\.?)\s*(?:degree)?\s*(?:in\s+)?",
+        re.IGNORECASE,
+    ),
+    re.compile(r"(?:ph\.?d\.?|doctorate)", re.IGNORECASE),
+]
+
+_CERT_PATTERNS = [
+    re.compile(
+        r"(AWS\s+(?:Solutions?\s+Architect|Developer|SysOps|DevOps)|"
+        r"Azure\s+(?:Developer|Administrator|AI\s+Engineer)|"
+        r"GCP\s+(?:Professional|Associate)|"
+        r"PMP|Scrum\s+Master|CISSP|CKA|CKAD)",
+        re.IGNORECASE,
+    ),
+]
+
+
+def _extract_experience_requirement(text):
+    results = []
+    seen = set()
+    for pattern in _EXPERIENCE_PATTERNS:
+        for match in pattern.finditer(text):
+            years = int(match.group(1))
+            if years not in seen:
+                seen.add(years)
+                results.append({"type": "experience", "value": f"{years}+ years", "years": years})
+    return results
+
+
+def _extract_degree_requirements(text):
+    results = []
+    for pattern in _DEGREE_PATTERNS:
+        for match in pattern.finditer(text):
+            results.append({"type": "degree", "value": match.group(0).strip()})
+    return results
+
+
+def _extract_cert_requirements(text):
+    results = []
+    for pattern in _CERT_PATTERNS:
+        for match in pattern.finditer(text):
+            results.append({"type": "certification", "value": match.group(0).strip()})
+    return results
+
+
+def _resume_has_experience(resume_lower, required_years):
+    """Heuristic: check if resume text suggests enough experience."""
+    year_range = re.compile(r"(\d{4})\s*[-\u2013]\s*(?:present|\d{4})", re.IGNORECASE)
+    for m in year_range.finditer(resume_lower):
+        start = int(m.group(1))
+        if start >= 2000:
+            span = 2026 - start
+            if span >= required_years:
+                return True
+    exp_mention = re.compile(r"(\d+)\s*\+?\s*years?\s+(?:of\s+)?experience", re.IGNORECASE)
+    for m in exp_mention.finditer(resume_lower):
+        if int(m.group(1)) >= required_years:
+            return True
+    return required_years <= 1
+
+
+_SUGGESTION_HINTS = {
+    "docker": "skills section or project descriptions",
+    "kubernetes": "skills section (only if you have exposure)",
+    "aws": "skills section or cloud experience subsection",
+    "gcp": "skills section or cloud experience subsection",
+    "azure": "skills section or cloud experience subsection",
+    "terraform": "DevOps/infrastructure skills section",
+    "ci/cd": "project descriptions (mention deployment workflows)",
+    "kafka": "skills section (only if you have exposure)",
+    "redis": "skills section (only if you have exposure)",
+    "spark": "skills section (only if you have exposure)",
+    "airflow": "skills section (only if you have exposure)",
+}
+
+
+# --- Default Resume Text (lazy-loaded to avoid circular import) ---
+_DEFAULT_RESUME_TEXT_CACHE = None
+
+
+def _get_default_resume_text():
+    global _DEFAULT_RESUME_TEXT_CACHE
+    if _DEFAULT_RESUME_TEXT_CACHE is not None:
+        return _DEFAULT_RESUME_TEXT_CACHE
+    from resume_tailor import RESUME_SKILLS, PROJECTS
+    from message_generator import SUBIDH_PROFILE
+    project_lines = []
+    for name, info in PROJECTS.items():
+        project_lines.append(f"{name}: {info['one_liner']}. Keywords: {', '.join(info['keywords'])}")
+    _DEFAULT_RESUME_TEXT_CACHE = (
+        f"SKILLS: {', '.join(RESUME_SKILLS)}\n\n"
+        f"PROFILE:\n{SUBIDH_PROFILE}\n\n"
+        f"PROJECTS:\n" + "\n".join(project_lines) + "\n\n"
+        f"EDUCATION:\nM.Tech in Artificial Intelligence, Amity University Noida (graduating March 2026)\n\n"
+        f"ADDITIONAL SKILLS: {', '.join(ALL_MY_SKILLS)}"
+    )
+    return _DEFAULT_RESUME_TEXT_CACHE
+
+
+def ats_check(resume_text, jd_text):
+    """Compare resume against JD for ATS keyword compatibility.
+
+    Returns dict with: ats_score (int 0-100), found (list), missing (list),
+    suggestions (list), truncation_warning (bool).
+    """
+    resume_lower = resume_text.lower()
+
+    truncation_warning = len(jd_text.strip()) < 600
+
+    # Extract tech keywords from JD
+    jd_tech_keywords = _extract_tech_keywords(jd_text)
+
+    # Extract non-tech requirements
+    experience_reqs = _extract_experience_requirement(jd_text)
+    degree_reqs = _extract_degree_requirements(jd_text)
+    cert_reqs = _extract_cert_requirements(jd_text)
+
+    # Match tech keywords with synonym expansion
+    tech_found = []
+    tech_missing = []
+    for kw in jd_tech_keywords:
+        synonyms = _expand_synonyms(kw)
+        if any(syn in resume_lower for syn in synonyms):
+            tech_found.append(kw)
+        else:
+            tech_missing.append(kw)
+
+    # Match non-tech requirements
+    non_tech_found = []
+    non_tech_missing = []
+
+    for req in experience_reqs:
+        if _resume_has_experience(resume_lower, req["years"]):
+            non_tech_found.append(req["value"])
+        else:
+            non_tech_missing.append(req["value"])
+
+    for req in degree_reqs:
+        raw_lower = req["value"].lower()
+        if any(t in resume_lower for t in [raw_lower, "m.tech", "master", "b.tech", "bachelor"]):
+            non_tech_found.append(req["value"])
+        else:
+            non_tech_missing.append(req["value"])
+
+    for req in cert_reqs:
+        if req["value"].lower() in resume_lower:
+            non_tech_found.append(req["value"])
+        else:
+            non_tech_missing.append(req["value"])
+
+    # Calculate score
+    total_items = len(jd_tech_keywords) + len(non_tech_found) + len(non_tech_missing)
+    found_items = len(tech_found) + len(non_tech_found)
+    ats_score = round(found_items / total_items * 100) if total_items > 0 else 100
+
+    # Generate suggestions
+    suggestions = []
+    for kw in tech_missing:
+        section = _SUGGESTION_HINTS.get(kw.lower(), "your skills section")
+        suggestions.append(f"Add '{kw}' to {section}")
+    for val in non_tech_missing:
+        if "year" in val.lower():
+            suggestions.append(
+                f"JD requires '{val}' \u2014 consider adding experience duration "
+                f"to your PathToPR entry or project timeline"
+            )
+        else:
+            suggestions.append(f"JD mentions '{val}' \u2014 verify your resume covers this")
+
+    return {
+        "ats_score": ats_score,
+        "found": sorted(tech_found + non_tech_found),
+        "missing": sorted(tech_missing + non_tech_missing),
+        "suggestions": suggestions,
+        "experience_reqs": experience_reqs,
+        "degree_reqs": degree_reqs,
+        "cert_reqs": cert_reqs,
+        "truncation_warning": truncation_warning,
+    }
+
+
+def quick_ats(jd_text, resume_text=None):
+    """Quick ATS score for nightly.py. Returns int 0-100."""
+    if resume_text is None:
+        resume_text = _get_default_resume_text()
+    return ats_check(resume_text, jd_text)["ats_score"]
+
 
 # --- Red flags ---
 RED_FLAGS = {
@@ -303,8 +578,10 @@ def quick_analyze(title, description):
     result = full_analyze(title, description)
     noc = result["noc"]
     skills = result["skills"]
+    ats = quick_ats(description)
 
     noc_str = f"NOC {noc['code']}" if noc["code"] else "NOC ?"
     match_str = f"{skills['match_percentage']}% match"
+    ats_str = f"ATS: {ats}%"
 
-    return f"{result['verdict_label']} | {noc_str} | {match_str}"
+    return f"{result['verdict_label']} | {noc_str} | {match_str} | {ats_str}"

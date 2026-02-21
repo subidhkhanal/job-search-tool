@@ -278,71 +278,151 @@ def get_role_analysis():
     return pd.DataFrame(rows)
 
 
-# ===================== WATCHLIST FUNCTIONS =====================
+# ===================== REFERRAL FUNCTIONS =====================
 
-def add_to_watchlist(company_name, career_url, platform_type="custom", company_slug=""):
+def add_referral(contact_name, company, contact_role="", relationship="",
+                 linkedin_url="", email="", notes=""):
     db = _get_client()
-    try:
-        db.table("watchlist").insert({
-            "company_name": company_name,
-            "career_url": career_url,
-            "platform_type": platform_type,
-            "company_slug": company_slug,
-        }).execute()
-    except Exception:
-        pass
+    today = datetime.now().strftime("%Y-%m-%d")
+    follow_up = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d")
+    db.table("referrals").insert({
+        "contact_name": contact_name,
+        "company": company,
+        "contact_role": contact_role,
+        "relationship": relationship,
+        "linkedin_url": linkedin_url,
+        "email": email,
+        "status": "Identified",
+        "last_contacted": today,
+        "follow_up_date": follow_up,
+        "notes": notes,
+    }).execute()
 
 
-def remove_from_watchlist(company_id):
+def update_referral_status(referral_id, new_status):
     db = _get_client()
-    db.table("watchlist_jobs").delete().eq("watchlist_id", company_id).execute()
-    db.table("watchlist").delete().eq("id", company_id).execute()
+    update_data = {"status": new_status}
+    if new_status == "Contacted":
+        today = datetime.now().strftime("%Y-%m-%d")
+        follow_up = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d")
+        update_data["last_contacted"] = today
+        update_data["follow_up_date"] = follow_up
+    db.table("referrals").update(update_data).eq("id", referral_id).execute()
 
 
-def get_watchlist():
+def get_referral_follow_ups_due():
     db = _get_client()
-    resp = (db.table("watchlist")
+    today = datetime.now().strftime("%Y-%m-%d")
+    terminal = ["Referral Given", "Applied via Referral", "Interview", "Offer"]
+    resp = (db.table("referrals")
             .select("*")
-            .eq("active", 1)
-            .order("company_name")
+            .lte("follow_up_date", today)
+            .execute())
+    df = pd.DataFrame(resp.data)
+    if df.empty:
+        return df
+    return df[~df["status"].isin(terminal)]
+
+
+def get_referral_stats():
+    db = _get_client()
+    resp = db.table("referrals").select("status").execute()
+    df = pd.DataFrame(resp.data)
+    stats = {
+        "total": len(df),
+        "by_status": {},
+        "referral_interview_rate": 0,
+    }
+    if df.empty:
+        return stats
+    stats["by_status"] = dict(df["status"].value_counts())
+    referred = len(df[df["status"].isin(["Referral Given", "Applied via Referral", "Interview", "Offer"])])
+    interviews = len(df[df["status"].isin(["Interview", "Offer"])])
+    stats["referral_interview_rate"] = round(interviews / referred * 100, 1) if referred > 0 else 0
+    return stats
+
+
+def get_referrals_by_company(company):
+    db = _get_client()
+    resp = (db.table("referrals")
+            .select("*")
+            .ilike("company", f"%{company}%")
             .execute())
     return pd.DataFrame(resp.data)
 
 
-def save_watchlist_job(watchlist_id, job_title, job_url):
-    db = _get_client()
-    try:
-        db.table("watchlist_jobs").upsert({
-            "watchlist_id": watchlist_id,
-            "job_title": job_title,
-            "job_url": job_url,
-        }, on_conflict="job_url", ignore_duplicates=True).execute()
-    except Exception:
-        pass
+# ===================== COMPANY RESEARCH CACHE =====================
 
-
-def get_new_watchlist_jobs():
+def get_cached_research(company_name):
     db = _get_client()
-    resp = (db.table("watchlist_jobs")
-            .select("*, watchlist(company_name, career_url)")
-            .eq("is_new", 1)
-            .order("first_seen", desc=True)
+    resp = (db.table("company_research_cache")
+            .select("*")
+            .ilike("company_name", company_name)
             .execute())
-    data = resp.data
-    for row in data:
-        wl = row.pop("watchlist", {}) or {}
-        row["company_name"] = wl.get("company_name", "")
-        row["career_url"] = wl.get("career_url", "")
-    return pd.DataFrame(data)
+    if not resp.data:
+        return None
+    row = resp.data[0]
+    # Check staleness (14 days)
+    researched = row.get("researched_at", "")
+    if researched:
+        try:
+            from dateutil.parser import parse as parse_dt
+            dt = parse_dt(researched)
+            if (datetime.now(dt.tzinfo) - dt).days > 14:
+                return None  # stale
+        except Exception:
+            pass
+    return row
 
 
-def mark_watchlist_job_seen(job_id):
+def save_research_cache(company_name, research_data):
     db = _get_client()
-    db.table("watchlist_jobs").update({"is_new": 0}).eq("id", job_id).execute()
+    import json
+    db.table("company_research_cache").upsert({
+        "company_name": company_name,
+        "description": research_data.get("description", ""),
+        "recent_news": research_data.get("recent_news", ""),
+        "tech_signals": json.dumps(research_data.get("tech_signals", [])),
+        "hiring_contact_name": research_data.get("hiring_contact", {}).get("name", ""),
+        "hiring_contact_title": research_data.get("hiring_contact", {}).get("title", ""),
+        "hiring_contact_linkedin": research_data.get("hiring_contact", {}).get("linkedin_url", ""),
+        "product_url": research_data.get("product_url", ""),
+    }, on_conflict="company_name").execute()
 
 
-def update_watchlist_checked(watchlist_id):
+# ===================== MINI DEMO FUNCTIONS =====================
+
+def add_mini_demo(company, role, demo_idea):
     db = _get_client()
-    db.table("watchlist").update({
-        "last_checked": datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }).eq("id", watchlist_id).execute()
+    db.table("mini_demos").insert({
+        "company": company,
+        "role": role,
+        "demo_idea": demo_idea,
+        "status": "Idea",
+        "hours_spent": 0,
+    }).execute()
+
+
+def update_mini_demo(demo_id, **kwargs):
+    """Update mini demo fields. Pass any of: status, github_url, demo_url, hours_spent, result."""
+    db = _get_client()
+    allowed = {"status", "github_url", "demo_url", "hours_spent", "result"}
+    update_data = {k: v for k, v in kwargs.items() if k in allowed}
+    if update_data:
+        db.table("mini_demos").update(update_data).eq("id", demo_id).execute()
+
+
+def get_active_demos():
+    db = _get_client()
+    resp = (db.table("mini_demos")
+            .select("*")
+            .in_("status", ["Idea", "Building", "Deployed"])
+            .order("created_at", desc=True)
+            .execute())
+    return pd.DataFrame(resp.data)
+
+
+def get_demo_results():
+    db = _get_client()
+    resp = db.table("mini_demos").select("*").order("created_at", desc=True).execute()
+    return pd.DataFrame(resp.data)

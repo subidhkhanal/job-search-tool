@@ -25,7 +25,10 @@
     </div>
 
     <button id="fill-btn" class="primary-btn">Fill Form</button>
+    <button id="cover-letter-btn" class="secondary-btn">Paste Cover Letter</button>
 
+    <div id="platform-info" class="platform-badge"></div>
+    <div id="fill-summary" class="fill-summary hidden"></div>
     <div id="status" class="status hidden"></div>
   </div>
 
@@ -80,6 +83,10 @@
       <div class="field">
         <label for="skills">Skills</label>
         <input type="text" id="skills" placeholder="Python, LangChain, RAG...">
+      </div>
+      <div class="field">
+        <label for="coverLetter">Default Cover Letter</label>
+        <textarea id="coverLetter" rows="4" placeholder="Short cover letter for auto-fill..."></textarea>
       </div>
 
       <button type="submit" class="primary-btn">Save</button>

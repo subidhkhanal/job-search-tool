@@ -15,11 +15,6 @@ echo "Initializing database..."
 python -c "from tracker import init_db; init_db(); print('Database initialized.')"
 echo ""
 
-# Load starter watchlist
-echo "Loading starter watchlist companies..."
-python -c "from tracker import init_db; init_db(); from watchlist import load_starter_list; load_starter_list(); print('Starter watchlist loaded.')"
-echo ""
-
 # Test scrapers (dry run)
 echo "Testing scraper imports..."
 python -c "from scraper import run_all_scrapers; print('Scraper imports OK')"

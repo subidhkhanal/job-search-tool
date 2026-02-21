@@ -8,18 +8,52 @@ const DEFAULT_PROFILE = {
   location: "Noida, India",
   currentRole: "AI Engineer Intern",
   experience: "Fresher",
-  skills: "Python, LangChain, RAG, FastAPI, OpenAI API, ChromaDB, Next.js, Agentic AI"
+  skills: "Python, LangChain, RAG, FastAPI, OpenAI API, ChromaDB, Next.js, Agentic AI",
+  coverLetter: "I'm an AI Engineer building production LLM systems. Currently interning at PathToPR.ca where I built automated content pipelines using OpenAI and Gemini APIs. My main project is an Agentic RAG Knowledge Base with hybrid retrieval, query routing, and RAGAS evaluation — built with LangChain, FastAPI, ChromaDB, and Next.js. I also run BCT Engineering Notes, Nepal's most popular CS blog with 2.2M+ views. I'd love to bring this experience to your team."
 };
 
 const FIELD_IDS = [
   "fullName", "email", "phone", "linkedin", "github",
-  "portfolio", "location", "currentRole", "experience", "skills"
+  "portfolio", "location", "currentRole", "experience", "skills", "coverLetter"
 ];
+
+// Platform-specific selectors
+const PLATFORM_SELECTORS = {
+  naukri: {
+    name: ["#name", 'input[name="name"]', 'input[placeholder*="name" i]'],
+    email: ["#email", 'input[name="email"]', 'input[type="email"]'],
+    phone: ["#mobile", 'input[name="mobile"]', 'input[name="phone"]'],
+    experience: ['#experience select', 'select[name="experience"]'],
+    currentSalary: ['#currentSalary', 'input[name="currentSalary"]'],
+    expectedSalary: ['#expectedSalary', 'input[name="expectedSalary"]'],
+    noticePeriod: ['select[name="noticePeriod"]'],
+    location: ['#location', 'input[name="location"]'],
+    defaults: { experience: "Fresher", noticePeriod: "Immediate", location: "Noida" }
+  },
+  internshala: {
+    name: ['input[name="student_name"]', "#student_name"],
+    email: ['input[name="student_email"]', "#student_email"],
+    phone: ['input[name="student_mobile"]', "#student_mobile"],
+    coverLetter: ['textarea[name="cover_letter"]', "#cover_letter"],
+    linkedin: ['input[name="linkedin"]', 'input[placeholder*="linkedin" i]'],
+    github: ['input[name="github"]', 'input[placeholder*="github" i]'],
+    availability: ['input[name="availability"]'],
+  },
+  wellfound: {
+    name: ['input[aria-label*="name" i]', 'input[placeholder*="name" i]'],
+    email: ['input[aria-label*="email" i]', 'input[type="email"]'],
+    linkedin: ['input[aria-label*="linkedin" i]', 'input[placeholder*="linkedin" i]'],
+    website: ['input[aria-label*="website" i]', 'input[placeholder*="portfolio" i]'],
+    resume: ['input[type="file"]'],
+    whyInterested: ['textarea[aria-label*="interested" i]', 'textarea[placeholder*="interested" i]'],
+  },
+};
 
 // DOM refs
 const mainView = document.getElementById("main-view");
 const settingsView = document.getElementById("settings-view");
 const fillBtn = document.getElementById("fill-btn");
+const coverLetterBtn = document.getElementById("cover-letter-btn");
 const settingsBtn = document.getElementById("settings-btn");
 const backBtn = document.getElementById("back-btn");
 const settingsForm = document.getElementById("settings-form");
@@ -27,6 +61,8 @@ const statusEl = document.getElementById("status");
 const saveStatusEl = document.getElementById("save-status");
 const displayName = document.getElementById("display-name");
 const displayEmail = document.getElementById("display-email");
+const platformInfo = document.getElementById("platform-info");
+const fillSummary = document.getElementById("fill-summary");
 
 // Load profile from storage
 function loadProfile() {
@@ -52,16 +88,44 @@ function showStatus(el, message, type) {
   setTimeout(() => el.classList.add("hidden"), 4000);
 }
 
+// Detect platform on the active tab
+async function detectCurrentPlatform() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const url = new URL(tab.url);
+    const hostname = url.hostname;
+    if (hostname.includes("naukri.com")) return "naukri";
+    if (hostname.includes("internshala.com")) return "internshala";
+    if (hostname.includes("cutshort.io")) return "cutshort";
+    if (hostname.includes("wellfound.com")) return "wellfound";
+    if (hostname.includes("linkedin.com")) return "linkedin";
+    if (hostname.includes("instahyre.com")) return "instahyre";
+    return "generic";
+  } catch {
+    return "generic";
+  }
+}
+
 // Initialize popup
 async function init() {
   const profile = await loadProfile();
   displayName.textContent = profile.fullName || "Set up your profile";
   displayEmail.textContent = profile.email || "Click settings to get started";
+
+  // Detect and show platform
+  const platform = await detectCurrentPlatform();
+  const platformNames = {
+    naukri: "Naukri.com", internshala: "Internshala", cutshort: "Cutshort",
+    wellfound: "Wellfound", linkedin: "LinkedIn", instahyre: "Instahyre",
+    generic: "Generic"
+  };
+  platformInfo.textContent = `Platform: ${platformNames[platform] || platform}`;
 }
 
 // Fill form button
 fillBtn.addEventListener("click", async () => {
   const profile = await loadProfile();
+  const platform = await detectCurrentPlatform();
 
   fillBtn.disabled = true;
   fillBtn.textContent = "Filling...";
@@ -72,12 +136,24 @@ fillBtn.addEventListener("click", async () => {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: fillFormFields,
-      args: [profile]
+      args: [profile, platform]
     });
 
     const result = results[0]?.result;
     if (result) {
       showStatus(statusEl, `Filled ${result.filled}/${result.total} fields`, "success");
+
+      // Show fill summary
+      if (result.details) {
+        let html = `<strong>Filled on ${result.platformName}:</strong><br>`;
+        for (const d of result.details) {
+          html += d.filled
+            ? `<span class="fill-ok">${d.field} ✓</span> `
+            : `<span class="fill-miss">${d.field} ✗</span> `;
+        }
+        fillSummary.innerHTML = html;
+        fillSummary.classList.remove("hidden");
+      }
     } else {
       showStatus(statusEl, "No form fields found on this page", "info");
     }
@@ -89,11 +165,37 @@ fillBtn.addEventListener("click", async () => {
   fillBtn.textContent = "Fill Form";
 });
 
+// Cover letter button
+coverLetterBtn.addEventListener("click", async () => {
+  const profile = await loadProfile();
+  const coverText = profile.coverLetter || DEFAULT_PROFILE.coverLetter;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: pasteCoverLetter,
+      args: [coverText]
+    });
+
+    const result = results[0]?.result;
+    if (result?.pasted) {
+      showStatus(statusEl, "Cover letter pasted!", "success");
+    } else {
+      showStatus(statusEl, "No cover letter field found", "info");
+    }
+  } catch (err) {
+    showStatus(statusEl, "Cannot paste on this page", "error");
+  }
+});
+
 // Settings navigation
 settingsBtn.addEventListener("click", async () => {
   const profile = await loadProfile();
   FIELD_IDS.forEach((id) => {
-    document.getElementById(id).value = profile[id] || "";
+    const el = document.getElementById(id);
+    if (el) el.value = profile[id] || "";
   });
   mainView.classList.add("hidden");
   settingsView.classList.remove("hidden");
@@ -110,14 +212,90 @@ settingsForm.addEventListener("submit", async (e) => {
   e.preventDefault();
   const profile = {};
   FIELD_IDS.forEach((id) => {
-    profile[id] = document.getElementById(id).value.trim();
+    const el = document.getElementById(id);
+    profile[id] = el ? el.value.trim() : "";
   });
   await saveProfile(profile);
   showStatus(saveStatusEl, "Saved!", "success");
 });
 
+// Function to paste cover letter into textarea
+function pasteCoverLetter(coverText) {
+  const coverPatterns = [
+    "cover_letter", "cover-letter", "coverletter", "cover letter",
+    "motivation", "why_interested", "why-interested", "message",
+    "additional_info", "additional-info", "note"
+  ];
+
+  const textareas = document.querySelectorAll("textarea");
+  for (const ta of textareas) {
+    const sig = [
+      ta.getAttribute("name"), ta.getAttribute("id"),
+      ta.getAttribute("placeholder"), ta.getAttribute("aria-label"),
+    ].filter(Boolean).map(s => s.toLowerCase()).join(" ");
+
+    if (coverPatterns.some(p => sig.includes(p))) {
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, "value"
+      )?.set;
+      if (nativeSetter) nativeSetter.call(ta, coverText);
+      else ta.value = coverText;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("change", { bubbles: true }));
+      ta.style.outline = "2px solid #4caf50";
+      return { pasted: true };
+    }
+  }
+
+  // Fallback: paste into the first large empty textarea
+  for (const ta of textareas) {
+    if (!ta.value && ta.offsetParent !== null && ta.rows >= 3) {
+      const nativeSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, "value"
+      )?.set;
+      if (nativeSetter) nativeSetter.call(ta, coverText);
+      else ta.value = coverText;
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+      ta.dispatchEvent(new Event("change", { bubbles: true }));
+      ta.style.outline = "2px solid #4caf50";
+      return { pasted: true };
+    }
+  }
+
+  return { pasted: false };
+}
+
 // The function injected into the page
-function fillFormFields(profile) {
+function fillFormFields(profile, platform) {
+  const platformNames = {
+    naukri: "Naukri.com", internshala: "Internshala", cutshort: "Cutshort",
+    wellfound: "Wellfound", linkedin: "LinkedIn", instahyre: "Instahyre",
+    generic: "Generic"
+  };
+
+  // Platform-specific direct selectors (try these first)
+  const PLATFORM_DIRECT = {
+    naukri: [
+      { field: "Name", selectors: ["#name", 'input[name="name"]'], value: profile.fullName },
+      { field: "Email", selectors: ["#email", 'input[name="email"]', 'input[type="email"]'], value: profile.email },
+      { field: "Phone", selectors: ["#mobile", 'input[name="mobile"]', 'input[name="phone"]'], value: profile.phone },
+      { field: "Location", selectors: ["#location", 'input[name="location"]'], value: "Noida" },
+    ],
+    internshala: [
+      { field: "Name", selectors: ['input[name="student_name"]', "#student_name"], value: profile.fullName },
+      { field: "Email", selectors: ['input[name="student_email"]', "#student_email"], value: profile.email },
+      { field: "Phone", selectors: ['input[name="student_mobile"]', "#student_mobile"], value: profile.phone },
+      { field: "LinkedIn", selectors: ['input[name="linkedin"]', 'input[placeholder*="linkedin" i]'], value: profile.linkedin },
+      { field: "GitHub", selectors: ['input[name="github"]', 'input[placeholder*="github" i]'], value: profile.github },
+    ],
+    wellfound: [
+      { field: "Name", selectors: ['input[aria-label*="name" i]', 'input[placeholder*="name" i]'], value: profile.fullName },
+      { field: "Email", selectors: ['input[aria-label*="email" i]', 'input[type="email"]'], value: profile.email },
+      { field: "LinkedIn", selectors: ['input[aria-label*="linkedin" i]', 'input[placeholder*="linkedin" i]'], value: profile.linkedin },
+      { field: "Website", selectors: ['input[aria-label*="website" i]', 'input[placeholder*="portfolio" i]'], value: profile.portfolio },
+    ],
+  };
+
   const FIELD_MATCHERS = {
     fullName: {
       patterns: ["name", "full_name", "full-name", "fullname", "applicant_name", "applicant-name", "your_name", "your-name", "candidate_name"],
@@ -191,22 +369,15 @@ function fillFormFields(profile) {
       el.getAttribute("data-field"),
       el.getAttribute("data-name")
     ];
-
-    // Also check associated label
     const labelEl = el.labels?.[0] || (el.id && document.querySelector(`label[for="${el.id}"]`));
-    if (labelEl) {
-      attrs.push(labelEl.textContent);
-    }
-
+    if (labelEl) attrs.push(labelEl.textContent);
     return attrs.filter(Boolean).map(s => s.toLowerCase().trim()).join(" ");
   }
 
   function matchField(signature, matcher) {
-    // Check excludes first
     for (const excl of matcher.excludePatterns) {
       if (signature.includes(excl)) return false;
     }
-    // Check includes
     for (const pattern of matcher.patterns) {
       if (signature.includes(pattern)) return true;
     }
@@ -225,13 +396,11 @@ function fillFormFields(profile) {
     )?.set || Object.getOwnPropertyDescriptor(
       window.HTMLTextAreaElement.prototype, "value"
     )?.set;
-
     if (nativeInputValueSetter) {
       nativeInputValueSetter.call(el, value);
     } else {
       el.value = value;
     }
-
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
     el.dispatchEvent(new Event("blur", { bubbles: true }));
@@ -240,27 +409,25 @@ function fillFormFields(profile) {
   function handleSelect(el, matcher) {
     const options = Array.from(el.options);
     const searchTerms = matcher.value.toLowerCase().split(/[\s,]+/);
-
-    // Try exact match first, then partial
     let bestMatch = null;
     let bestScore = 0;
 
     for (const option of options) {
       if (option.disabled || option.value === "") continue;
       const text = (option.text + " " + option.value).toLowerCase();
-
       let score = 0;
       for (const term of searchTerms) {
         if (text.includes(term)) score++;
       }
-
-      // Special handling for experience dropdowns
       if (matcher === FIELD_MATCHERS.experience) {
         if (text.includes("fresher") || text.includes("0") || text.match(/0[\s-]*1/)) {
           score += 5;
         }
       }
-
+      // Naukri notice period: prefer "Immediate" or "15 days"
+      if (platform === "naukri" && getFieldSignature(el).includes("notice")) {
+        if (text.includes("immediate") || text.includes("15 day")) score += 5;
+      }
       if (score > bestScore) {
         bestScore = score;
         bestMatch = option;
@@ -281,18 +448,49 @@ function fillFormFields(profile) {
     el.style.transition = "outline 0.3s ease";
   }
 
-  // Gather all inputs, textareas, and selects
-  const inputs = document.querySelectorAll("input, textarea, select");
+  // Track fill details for summary
+  const details = [];
   let filled = 0;
   let total = 0;
 
+  // Step 1: Try platform-specific direct selectors first
+  const directSelectors = PLATFORM_DIRECT[platform] || [];
+  const directFilled = new Set();
+
+  for (const entry of directSelectors) {
+    if (!entry.value) continue;
+    let found = false;
+    for (const sel of entry.selectors) {
+      try {
+        const el = document.querySelector(sel);
+        if (el && isVisible(el) && !el.disabled && !el.readOnly) {
+          if (!el.value || el.value.trim() === "") {
+            setNativeValue(el, entry.value);
+            highlightField(el);
+            filled++;
+            directFilled.add(el);
+            found = true;
+            details.push({ field: entry.field, filled: true });
+            break;
+          }
+        }
+      } catch (e) { /* invalid selector, skip */ }
+    }
+    if (!found) {
+      details.push({ field: entry.field, filled: false });
+    }
+  }
+
+  // Step 2: Fall back to generic pattern matching for remaining fields
+  const inputs = document.querySelectorAll("input, textarea, select");
+
   for (const el of inputs) {
+    if (directFilled.has(el)) continue;
     if (!isVisible(el)) continue;
     if (el.disabled || el.readOnly) continue;
 
     const type = el.type?.toLowerCase();
     if (["hidden", "submit", "button", "reset", "checkbox", "radio", "file", "image"].includes(type)) {
-      // For file inputs, trigger the picker
       if (type === "file") {
         const sig = getFieldSignature(el);
         if (sig.includes("resume") || sig.includes("cv") || sig.includes("attachment")) {
@@ -307,7 +505,6 @@ function fillFormFields(profile) {
 
     total++;
 
-    // Skip if already has content
     if (el.value && el.value.trim() !== "") continue;
 
     let matched = false;
@@ -326,12 +523,18 @@ function fillFormFields(profile) {
       if (matched) {
         highlightField(el);
         filled++;
+        details.push({ field: key, filled: true });
         break;
       }
     }
   }
 
-  return { filled, total };
+  return {
+    filled,
+    total: total + directSelectors.length,
+    platformName: platformNames[platform] || platform,
+    details
+  };
 }
 
 // Init on open

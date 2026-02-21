@@ -1,0 +1,40 @@
+Collecting python-jobspy
+  Downloading python_jobspy-1.1.82-py3-none-any.whl.metadata (10 kB)
+Collecting NUMPY==1.26.3 (from python-jobspy)
+  Downloading numpy-1.26.3-cp312-cp312-win_amd64.whl.metadata (61 kB)
+Requirement already satisfied: beautifulsoup4<5.0.0,>=4.12.2 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from python-jobspy) (4.14.3)
+Collecting markdownify<0.14.0,>=0.13.1 (from python-jobspy)
+  Downloading markdownify-0.13.1-py3-none-any.whl.metadata (8.5 kB)
+Requirement already satisfied: pandas<3.0.0,>=2.1.0 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from python-jobspy) (2.3.3)
+Requirement already satisfied: pydantic<3.0.0,>=2.3.0 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from python-jobspy) (2.12.5)
+Collecting regex<2025.0.0,>=2024.4.28 (from python-jobspy)
+  Downloading regex-2024.11.6-cp312-cp312-win_amd64.whl.metadata (41 kB)
+Requirement already satisfied: requests<3.0.0,>=2.31.0 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from python-jobspy) (2.32.5)
+Collecting tls-client<2.0.0,>=1.0.1 (from python-jobspy)
+  Downloading tls_client-1.0.1-py3-none-any.whl.metadata (5.0 kB)
+Requirement already satisfied: soupsieve>=1.6.1 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from beautifulsoup4<5.0.0,>=4.12.2->python-jobspy) (2.8.3)
+Requirement already satisfied: typing-extensions>=4.0.0 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from beautifulsoup4<5.0.0,>=4.12.2->python-jobspy) (4.15.0)
+Requirement already satisfied: six<2,>=1.15 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from markdownify<0.14.0,>=0.13.1->python-jobspy) (1.17.0)
+Requirement already satisfied: python-dateutil>=2.8.2 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from pandas<3.0.0,>=2.1.0->python-jobspy) (2.9.0.post0)
+Requirement already satisfied: pytz>=2020.1 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from pandas<3.0.0,>=2.1.0->python-jobspy) (2025.2)
+Requirement already satisfied: tzdata>=2022.7 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from pandas<3.0.0,>=2.1.0->python-jobspy) (2025.3)
+Requirement already satisfied: annotated-types>=0.6.0 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from pydantic<3.0.0,>=2.3.0->python-jobspy) (0.7.0)
+Requirement already satisfied: pydantic-core==2.41.5 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from pydantic<3.0.0,>=2.3.0->python-jobspy) (2.41.5)
+Requirement already satisfied: typing-inspection>=0.4.2 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from pydantic<3.0.0,>=2.3.0->python-jobspy) (0.4.2)
+Requirement already satisfied: charset_normalizer<4,>=2 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from requests<3.0.0,>=2.31.0->python-jobspy) (3.4.4)
+Requirement already satisfied: idna<4,>=2.5 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from requests<3.0.0,>=2.31.0->python-jobspy) (3.11)
+Requirement already satisfied: urllib3<3,>=1.21.1 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from requests<3.0.0,>=2.31.0->python-jobspy) (2.6.3)
+Requirement already satisfied: certifi>=2017.4.17 in c:\users\subidh\appdata\local\programs\python\python312\lib\site-packages (from requests<3.0.0,>=2.31.0->python-jobspy) (2026.1.4)
+Downloading python_jobspy-1.1.82-py3-none-any.whl (52 kB)
+Downloading numpy-1.26.3-cp312-cp312-win_amd64.whl (15.5 MB)
+   ---------------------------------------- 15.5/15.5 MB 1.0 MB/s eta 0:00:00
+Downloading markdownify-0.13.1-py3-none-any.whl (10 kB)
+Downloading regex-2024.11.6-cp312-cp312-win_amd64.whl (273 kB)
+Downloading tls_client-1.0.1-py3-none-any.whl (41.3 MB)
+   ---------------------------------------- 41.3/41.3 MB 1.4 MB/s eta 0:00:00
+Installing collected packages: tls-client, regex, NUMPY, markdownify, python-jobspy
+  Attempting uninstall: NUMPY
+    Found existing installation: numpy 2.4.1
+    Uninstalling numpy-2.4.1:
+      Successfully uninstalled numpy-2.4.1
+Successfully installed NUMPY-1.26.3 markdownify-0.13.1 python-jobspy-1.1.82 regex-2024.11.6 tls-client-1.0.1

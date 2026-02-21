@@ -3,7 +3,6 @@ from groq import Groq
 SUBIDH_PROFILE = """
 - AI Engineer Intern at PathToPR.ca (Dec 2025 – Present): Built automated data ingestion pipeline, integrated OpenAI and Gemini APIs for content generation and summarization, automated multi-platform publishing (Facebook, Instagram, Telegram, X, Threads) — reduced manual content creation from hours to minutes
 - M.Tech in Artificial Intelligence from Amity University Noida (graduating March 2026)
-- Published research: "Efficient Task Allocation for Internet of Vehicle using Binary Quantum PSO with a Digital Twin Framework" — Digital Signal Processing Journal (Impact Factor 3.0)
 - Built Agentic RAG Knowledge Base: document Q&A system with hybrid retrieval (dense + BM25 via reciprocal rank fusion), query routing, RAGAS evaluation framework. Tech: Python, FastAPI, LangChain, ChromaDB, OpenAI, Cohere, Next.js
 - Built BCT Engineering Notes: Nepal's most popular CS blog — 2.2M+ organic views, 87K monthly visitors, 904% YOY growth, $0 ad spend
 - Tech stack: LangChain, RAG Pipelines, Agentic AI, Hybrid Search, RAGAS, Python, FastAPI, REST APIs, Web Scraping, Automation Pipelines, Next.js, Tailwind CSS, ChromaDB, SQL, Git
@@ -35,7 +34,7 @@ RULES:
 6. Do NOT sound like ChatGPT — no "I hope this message finds you well", no "I'm reaching out because"
 7. Tone: {tone}
 8. Do NOT mention Canada, immigration, or PR goals
-9. Mention the published research paper ONLY if relevant to their work. Lead with the PathToPR automation pipeline or the Agentic RAG project — these are more impressive for practical roles than academic papers.
+9. Lead with the PathToPR automation pipeline or the Agentic RAG project — these are more impressive for practical roles.
 10. Be genuine and specific — generic messages get ignored
 11. If the company uses LangChain, RAG, or vector databases, emphasize the Agentic RAG Knowledge Base project specifically — it directly demonstrates the skills they need.
 
@@ -76,7 +75,7 @@ RULES:
    The "new piece of value" should be one of these based on what's relevant to the company:
    - A specific feature of my Agentic RAG project that solves their problem
    - A metric from PathToPR (hours to minutes automation) or BCT Notes (2.2M views, 904% growth)
-   - A brief insight about their product showing I've used/researched it
+   - A brief insight about their product showing I've used it
    Do NOT repeat the same value-add from the original application.
 4. Make it easy to respond to (yes/no question or simple ask)
 5. No "just following up" or "circling back" — those are instant deletes
@@ -118,9 +117,7 @@ RULES:
    - If they need LLM/RAG: lead with Agentic RAG project
    - If they need automation/APIs: lead with PathToPR pipeline
    - If they need content/growth: lead with BCT Engineering Notes
-   - If they need research/academic: lead with the published paper
-7. Mention the research paper ONLY if relevant to the role
-8. Do NOT mention immigration plans
+7. Do NOT mention immigration plans
 
 Generate the cover letter, ready to copy.
 """
@@ -160,5 +157,88 @@ Generate the thank-you message.
         temperature=0.6,
         max_tokens=200
     )
-    
+
+    return response.choices[0].message.content
+
+
+def generate_referral_request(client, contact_name, contact_role, company,
+                              role_applying_for, relationship):
+    """Generate a referral request message tailored to the relationship type."""
+
+    if relationship in ("College alumni", "Friend", "Friend of friend"):
+        tone_instruction = "Warm, casual tone — you know this person. Use first name."
+    else:
+        tone_instruction = "Professional but not stiff. Respectful of their time."
+
+    prompt = f"""Write a referral request message.
+
+ABOUT YOU:
+{SUBIDH_PROFILE}
+
+TARGET CONTACT:
+- Name: {contact_name}
+- Their role: {contact_role} at {company}
+- Your relationship: {relationship}
+
+ROLE YOU WANT:
+- Position: {role_applying_for} at {company}
+
+RULES:
+1. Under 80 words
+2. {tone_instruction}
+3. Mention something specific about WHY you want to work at {company}
+4. Include a relevant project link (Agentic RAG or PathToPR)
+5. End with a direct ask: "Would you be open to referring me for the {role_applying_for} position?"
+6. Do NOT say "I know this is a big ask"
+7. Do NOT mention immigration or PR goals
+
+Generate 1 message, ready to copy.
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=200,
+    )
+
+    return response.choices[0].message.content
+
+
+def generate_demo_outreach(client, company, role, demo_url, demo_description,
+                           company_desc):
+    """Generate an outreach message that leads with a demo you built."""
+
+    prompt = f"""Write an outreach message leading with a mini demo/prototype.
+
+ABOUT YOU:
+{SUBIDH_PROFILE}
+
+CONTEXT:
+- Company: {company}
+- Role: {role}
+- What company does: {company_desc}
+- Demo you built: {demo_description}
+- Demo URL: {demo_url}
+
+RULES:
+1. Open with 1 line about their company/product showing you've researched them
+2. Next: "I built [specific thing] that [solves specific problem for them]"
+3. Include the demo URL prominently
+4. End with: "Happy to walk through the approach — would 15 minutes work?"
+5. Under 120 words total
+6. This is NOT a job application — it's a value-first introduction
+7. Generate 2 variants: one for LinkedIn DM, one for email
+8. Do NOT mention immigration or PR goals
+
+Generate both variants.
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.7,
+        max_tokens=500,
+    )
+
     return response.choices[0].message.content

@@ -9,8 +9,6 @@ on:
 jobs:
   scrape-and-plan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write  # Required to push seen_urls.json back
 
     steps:
       - name: Checkout repository
@@ -38,12 +36,3 @@ jobs:
           name: tonight-battle-plan
           path: TONIGHT.md
           retention-days: 7
-
-      - name: Commit seen_urls.json back to repo
-        if: always()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add seen_urls.json
-          git diff --cached --quiet || git commit -m "chore: update seen_urls after nightly run [skip ci]"
-          git pull --rebase origin main && git push

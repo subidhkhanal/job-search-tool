@@ -141,7 +141,6 @@ JOB DESCRIPTION (key parts):
 CANDIDATE BACKGROUND:
 - AI Engineer Intern at PathToPR.ca — built automated data pipelines with OpenAI/Gemini APIs
 - M.Tech AI from Amity University (graduating March 2026)
-- Published research in Digital Signal Processing Journal (IF 3.0)
 - Built Agentic RAG Knowledge Base with hybrid retrieval, LangChain, ChromaDB, FastAPI
 - Built BCT Engineering Notes blog — 2.2M+ views, 904% YOY growth
 

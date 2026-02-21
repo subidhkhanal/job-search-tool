@@ -1,10 +1,15 @@
 import requests
 from bs4 import BeautifulSoup
-import json
-import re
 import time
 from datetime import datetime
+from urllib.parse import quote_plus
 from tracker import save_scraped_job
+
+
+def generate_career_url(company, title=""):
+    """Google search URL targeting the company's career page for this role."""
+    query = f'{company} careers "{title}"' if title else f'{company} careers jobs'
+    return f"https://www.google.com/search?q={quote_plus(query)}"
 
 
 def _get_with_retry(url, max_attempts=3, timeout=15, **kwargs):
@@ -23,10 +28,6 @@ def _get_with_retry(url, max_attempts=3, timeout=15, **kwargs):
                 time.sleep(wait)
     raise last_exc
 
-try:
-    from googlesearch import search as google_search
-except ImportError:
-    google_search = None
 
 KEYWORDS = [
     # Core AI/LLM
@@ -73,11 +74,11 @@ def scrape_remotive():
         url = "https://remotive.com/api/remote-jobs?category=software-dev&limit=50"
         resp = _get_with_retry(url)
         data = resp.json()
-        
+
         for job in data.get("jobs", []):
             title = job.get("title", "")
             desc = job.get("description", "")
-            
+
             if matches_keywords(title) or matches_keywords(desc[:500]):
                 job_data = {
                     "title": title,
@@ -91,54 +92,34 @@ def scrape_remotive():
                 save_scraped_job(**job_data)
     except Exception as e:
         print(f"Remotive error: {e}")
-    
+
     return jobs
 
-def _is_current_hn_thread(title):
-    """Return True if the HN thread title contains the current month and year."""
-    now = datetime.now()
-    t = title.lower()
-    return now.strftime("%B").lower() in t and str(now.year) in t
+HN_THREAD_ID = "46857488"
 
 
 def scrape_hn_who_is_hiring():
     """Scrape HackerNews 'Who is hiring?' thread - free HN API."""
     jobs = []
     try:
-        # Find the latest "Who is hiring" thread
-        search_url = "https://hn.algolia.com/api/v1/search?query=who%20is%20hiring&tags=story&hitsPerPage=5"
-        resp = _get_with_retry(search_url)
-        stories = resp.json().get("hits", [])
-
-        hiring_story = None
-        for story in stories:
-            title = story.get("title", "")
-            if "who is hiring" in title.lower() and _is_current_hn_thread(title):
-                hiring_story = story
-                break
-
-        if not hiring_story:
-            print("  WARNING: No current-month HN 'Who is Hiring' thread found.")
-            return jobs
-        
-        # Get comments from the thread
-        story_id = hiring_story["objectID"]
+        # Use the known thread ID directly
+        story_id = HN_THREAD_ID
         comments_url = f"https://hn.algolia.com/api/v1/search?tags=comment,story_{story_id}&hitsPerPage=200"
         resp = _get_with_retry(comments_url)
         comments = resp.json().get("hits", [])
-        
+
         for comment in comments:
             text = comment.get("comment_text", "")
             if not text:
                 continue
-            
+
             text_clean = BeautifulSoup(text, "html.parser").get_text()
-            
+
             # Check if it matches AI/ML keywords
             if matches_keywords(text_clean):
                 # Check if India-friendly (remote or India mentioned)
                 is_india_friendly = any(kw in text_clean.lower() for kw in INDIA_KEYWORDS)
-                
+
                 # Extract company and role from first line
                 # HN format is usually: "Company | Role | Location | Type"
                 first_line = text_clean.split("\n")[0].strip()
@@ -173,7 +154,7 @@ def scrape_hn_who_is_hiring():
                 save_scraped_job(**job_data)
     except Exception as e:
         print(f"HN error: {e}")
-    
+
     return jobs
 
 def scrape_arbeitnow():
@@ -183,15 +164,15 @@ def scrape_arbeitnow():
         url = "https://www.arbeitnow.com/api/job-board-api"
         resp = _get_with_retry(url)
         data = resp.json()
-        
+
         for job in data.get("data", []):
             title = job.get("title", "")
             desc = job.get("description", "")
             location = job.get("location", "")
-            
+
             is_relevant = matches_keywords(title) or matches_keywords(desc[:500])
             is_india = any(kw in location.lower() for kw in INDIA_KEYWORDS) or job.get("remote", False)
-            
+
             if is_relevant and is_india:
                 job_data = {
                     "title": title,
@@ -205,220 +186,69 @@ def scrape_arbeitnow():
                 save_scraped_job(**job_data)
     except Exception as e:
         print(f"Arbeitnow error: {e}")
-    
+
     return jobs
 
-def scrape_github_jobs_search():
-    """Search GitHub repositories for job postings in AI/ML."""
+
+def scrape_jobspy():
+    """Scrape multiple job boards via JobSpy (Indeed, Google, Glassdoor)."""
     jobs = []
     try:
-        # Search for recent AI job posting repos
-        url = "https://api.github.com/search/repositories?q=ai+ml+jobs+india+2025+2026&sort=updated&per_page=10"
-        headers = {"Accept": "application/vnd.github.v3+json"}
-        resp = _get_with_retry(url, headers=headers)
-        
-        if resp.status_code == 200:
-            for repo in resp.json().get("items", []):
-                job_data = {
-                    "title": repo.get("name", ""),
-                    "company": repo.get("owner", {}).get("login", "Unknown"),
-                    "location": "Various",
-                    "source": "GitHub Repos",
-                    "url": repo.get("html_url", ""),
-                    "description": (repo.get("description", "") or "")[:500]
-                }
-                jobs.append(job_data)
-                save_scraped_job(**job_data)
-    except Exception as e:
-        print(f"GitHub error: {e}")
-    
-    return jobs
-
-GOOGLE_QUERIES = [
-    # Location-specific
-    '"ai developer" OR "ai engineer" OR "ai intern" site:careers.* OR site:jobs.* Delhi NCR',
-    '"gen ai" OR "llm" OR "langchain" hiring Noida OR Gurgaon OR Delhi',
-    '"machine learning" intern OR developer Bangalore OR Hyderabad OR Pune 2026',
-    '"rag" OR "vector database" OR "langchain" developer India',
-
-    # ATS platform-specific (catches jobs not on LinkedIn)
-    'site:lever.co "ai" OR "machine learning" India',
-    'site:boards.greenhouse.io "ai" OR "llm" India',
-    'site:ashbyhq.com "ai" OR "machine learning" India',
-
-    # Direct career pages
-    '"careers" OR "jobs" "ai developer" OR "gen ai" Noida OR Gurgaon OR Delhi 2026',
-    '"we are hiring" "ai" OR "ml" OR "llm" Delhi NCR',
-
-    # Startup-specific
-    'ai startup hiring India internship 2026',
-    '"founding engineer" OR "early engineer" ai India',
-]
-
-NAUKRI_FEEDS = [
-    "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=ai+developer",
-    "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=machine+learning",
-    "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=gen+ai",
-    "https://www.naukri.com/jobs-in-india?rss=1&keyword=langchain",
-    "https://www.naukri.com/jobs-in-india?rss=1&keyword=ai+intern",
-]
-
-INDEED_FEEDS = [
-    "https://www.indeed.co.in/rss?q=ai+developer&l=Delhi+NCR",
-    "https://www.indeed.co.in/rss?q=machine+learning+intern&l=India",
-    "https://www.indeed.co.in/rss?q=gen+ai+developer&l=India",
-    "https://www.indeed.co.in/rss?q=langchain&l=India",
-]
-
-
-def scrape_google_jobs():
-    """Search Google for AI/ML job listings on career pages and ATS platforms.
-    Rotates through queries — runs 3-4 per night to avoid rate limits."""
-    jobs = []
-    if google_search is None:
-        print("googlesearch-python not installed — skipping Google scraper.")
+        from jobspy import scrape_jobs
+    except ImportError:
+        print("python-jobspy not installed — skipping JobSpy scraper. Run: pip install python-jobspy")
         return jobs
 
-    # Pick 3-4 queries based on day of week (rotate across the full list)
-    day_index = datetime.now().timetuple().tm_yday  # 1-366
-    batch_size = 4
-    start = (day_index * batch_size) % len(GOOGLE_QUERIES)
-    tonight_queries = []
-    for i in range(batch_size):
-        tonight_queries.append(GOOGLE_QUERIES[(start + i) % len(GOOGLE_QUERIES)])
+    search_queries = [
+        "AI developer India",
+        "machine learning intern India",
+        "gen ai developer Delhi NCR",
+        "LLM engineer India",
+        "python developer AI Noida",
+        "AI intern India",
+        "agentic AI developer India",
+    ]
 
     seen_urls = set()
 
-    for query in tonight_queries:
+    for query in search_queries:
         try:
-            import time
-            results = list(google_search(query, num_results=10, lang="en"))
-            for url in results:
+            results = scrape_jobs(
+                site_name=["indeed", "google", "glassdoor"],
+                search_term=query,
+                location="India",
+                results_wanted=10,
+                hours_old=72,
+                country_indeed="India",
+            )
+
+            for _, row in results.iterrows():
+                title = str(row.get("title", ""))
+                url = str(row.get("job_url", ""))
+
+                # Deduplicate across queries
                 if url in seen_urls:
                     continue
                 seen_urls.add(url)
 
-                # Extract a meaningful title from the URL
-                title = url.split("/")[-1].replace("-", " ").replace("_", " ").title()
-                if len(title) < 5:
-                    title = url.split("/")[-2].replace("-", " ").title() if len(url.split("/")) > 2 else "Job Listing"
-
-                # Try to extract company from domain
-                domain = url.split("//")[-1].split("/")[0]
-                company_parts = domain.replace("www.", "").replace("careers.", "").replace("jobs.", "")
-                company = company_parts.split(".")[0].title()
+                desc = str(row.get("description", "") or "")
+                if not matches_keywords(title) and not matches_keywords(desc[:500]):
+                    continue
 
                 job_data = {
                     "title": title[:150],
-                    "company": company,
-                    "location": "See listing",
-                    "source": "Google Career Search",
+                    "company": str(row.get("company_name", "Unknown"))[:80],
+                    "location": str(row.get("location", "India"))[:80],
+                    "source": f"JobSpy/{row.get('site', 'unknown')}",
                     "url": url,
-                    "description": f"Found via: {query[:100]}"
-                }
-
-                # Only save if it looks like a job page
-                if matches_keywords(title) or matches_keywords(query):
-                    jobs.append(job_data)
-                    save_scraped_job(**job_data)
-
-            time.sleep(2)  # Be polite between queries
-        except Exception as e:
-            print(f"Google search error for '{query[:50]}...': {e}")
-
-    return jobs
-
-
-def scrape_naukri_rss():
-    """Parse Naukri RSS feeds for AI/ML jobs in Delhi NCR."""
-    jobs = []
-    for feed_url in NAUKRI_FEEDS:
-        try:
-            resp = _get_with_retry(feed_url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
-            })
-
-            soup = BeautifulSoup(resp.content, "xml")
-            items = soup.find_all("item")
-
-            for item in items[:15]:  # Cap per feed
-                title = item.find("title")
-                link = item.find("link")
-                desc = item.find("description")
-
-                title_text = title.get_text(strip=True) if title else "Untitled"
-                link_text = link.get_text(strip=True) if link else ""
-                desc_text = desc.get_text(strip=True) if desc else ""
-
-                if not matches_keywords(title_text) and not matches_keywords(desc_text[:300]):
-                    continue
-
-                # Extract company from description if possible
-                company = "See Naukri listing"
-                company_match = re.search(r"(?:at|by|company:?)\s+([^,\n<]+)", desc_text, re.IGNORECASE)
-                if company_match:
-                    company = company_match.group(1).strip()[:80]
-
-                job_data = {
-                    "title": title_text[:150],
-                    "company": company,
-                    "location": "Delhi NCR / India",
-                    "source": "Naukri RSS",
-                    "url": link_text,
-                    "description": BeautifulSoup(desc_text[:1000], "html.parser").get_text()[:500]
+                    "description": desc[:500],
                 }
                 jobs.append(job_data)
                 save_scraped_job(**job_data)
+
+            time.sleep(3)  # Pause between queries
         except Exception as e:
-            print(f"Naukri RSS error: {e}")
-
-    return jobs
-
-
-def scrape_indeed_rss():
-    """Parse Indeed India RSS feeds for AI/ML jobs."""
-    jobs = []
-    for feed_url in INDEED_FEEDS:
-        try:
-            resp = _get_with_retry(feed_url, headers={
-                "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
-            })
-
-            soup = BeautifulSoup(resp.content, "xml")
-            items = soup.find_all("item")
-
-            for item in items[:15]:
-                title = item.find("title")
-                link = item.find("link")
-                desc = item.find("description")
-
-                title_text = title.get_text(strip=True) if title else "Untitled"
-                link_text = link.get_text(strip=True) if link else ""
-                desc_text = desc.get_text(strip=True) if desc else ""
-
-                if not matches_keywords(title_text) and not matches_keywords(desc_text[:300]):
-                    continue
-
-                # Indeed titles often include company: "Role - Company"
-                company = "See Indeed listing"
-                if " - " in title_text:
-                    parts = title_text.rsplit(" - ", 1)
-                    if len(parts) == 2:
-                        company = parts[1].strip()[:80]
-                        title_text = parts[0].strip()
-
-                job_data = {
-                    "title": title_text[:150],
-                    "company": company,
-                    "location": "India",
-                    "source": "Indeed RSS",
-                    "url": link_text,
-                    "description": BeautifulSoup(desc_text[:1000], "html.parser").get_text()[:500]
-                }
-                jobs.append(job_data)
-                save_scraped_job(**job_data)
-        except Exception as e:
-            print(f"Indeed RSS error: {e}")
+            print(f"  JobSpy query '{query}' error: {e}")
 
     return jobs
 
@@ -462,6 +292,120 @@ def scrape_linkedin_search_urls():
         searches.append({"query": q, "url": url})
     return searches
 
+def scrape_hasjob():
+    """Scrape HasJob by HasGeek for AI/ML jobs in India."""
+    jobs = []
+    try:
+        url = "https://hasjob.co/search?q=ai+ml"
+        resp = _get_with_retry(url, headers={"User-Agent": "Mozilla/5.0"})
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        listings = soup.select(".listing")[:30]
+        for listing in listings:
+            title_el = listing.select_one(".listing-title a, h2 a")
+            company_el = listing.select_one(".listing-company, .company")
+            location_el = listing.select_one(".listing-location, .location")
+
+            if not title_el:
+                continue
+
+            title = title_el.get_text(strip=True)
+            company = company_el.get_text(strip=True) if company_el else "Unknown"
+            location = location_el.get_text(strip=True) if location_el else "India"
+            link = title_el.get("href", "")
+            if link and not link.startswith("http"):
+                link = f"https://hasjob.co{link}"
+
+            if matches_keywords(title):
+                job_data = {
+                    "title": title[:150],
+                    "company": company[:80],
+                    "location": location[:80],
+                    "source": "HasJob",
+                    "url": link,
+                    "description": title,
+                }
+                jobs.append(job_data)
+                save_scraped_job(**job_data)
+    except Exception as e:
+        print(f"HasJob error: {e}")
+    return jobs
+
+
+def scrape_developersindia():
+    """Scrape developersindia.in job board for AI/ML jobs."""
+    jobs = []
+    try:
+        url = "https://developersindia.in/job-board"
+        resp = _get_with_retry(url, headers={"User-Agent": "Mozilla/5.0"})
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # Try common listing patterns
+        for link_el in soup.select("a[href*='job'], a[href*='position'], .job-listing a, .job-card a")[:30]:
+            title = link_el.get_text(strip=True)
+            href = link_el.get("href", "")
+            if not href.startswith("http"):
+                href = f"https://developersindia.in{href}"
+
+            if title and matches_keywords(title):
+                job_data = {
+                    "title": title[:150],
+                    "company": "via developersIndia",
+                    "location": "India",
+                    "source": "developersIndia",
+                    "url": href,
+                    "description": title,
+                }
+                jobs.append(job_data)
+                save_scraped_job(**job_data)
+    except Exception as e:
+        print(f"developersIndia error: {e}")
+    return jobs
+
+
+def scrape_internshala():
+    """Scrape Internshala for AI/ML internships."""
+    jobs = []
+    urls = [
+        "https://internshala.com/internships/artificial-intelligence-internship",
+        "https://internshala.com/internships/machine-learning-internship",
+    ]
+    try:
+        for page_url in urls:
+            resp = _get_with_retry(page_url, headers={"User-Agent": "Mozilla/5.0"})
+            soup = BeautifulSoup(resp.text, "html.parser")
+
+            for card in soup.select(".individual_internship, .internship_meta, .internship-heading-container")[:20]:
+                title_el = card.select_one("h3, .heading_4_5, .profile a, a.view_detail_button")
+                company_el = card.select_one(".company_name, h4, .heading_6")
+                location_el = card.select_one(".location_link, #location_names span")
+
+                if not title_el:
+                    continue
+
+                title = title_el.get_text(strip=True)
+                company = company_el.get_text(strip=True) if company_el else "Unknown"
+                location = location_el.get_text(strip=True) if location_el else "India"
+                link = title_el.get("href", "")
+                if link and not link.startswith("http"):
+                    link = f"https://internshala.com{link}"
+
+                job_data = {
+                    "title": title[:150],
+                    "company": company[:80],
+                    "location": location[:80],
+                    "source": "Internshala",
+                    "url": link,
+                    "description": f"Internship: {title}",
+                }
+                jobs.append(job_data)
+                save_scraped_job(**job_data)
+            time.sleep(2)
+    except Exception as e:
+        print(f"Internshala error: {e}")
+    return jobs
+
+
 def run_all_scrapers():
     """Run all automated scrapers and return combined results with error tracking."""
     all_jobs = []
@@ -472,10 +416,10 @@ def run_all_scrapers():
         ("Remotive", scrape_remotive),
         ("HN Who's Hiring", scrape_hn_who_is_hiring),
         ("Arbeitnow", scrape_arbeitnow),
-        ("GitHub Repos", scrape_github_jobs_search),
-        ("Google Career Search", scrape_google_jobs),
-        ("Naukri RSS", scrape_naukri_rss),
-        ("Indeed RSS", scrape_indeed_rss),
+        ("JobSpy (Indeed/Google/Glassdoor)", scrape_jobspy),
+        ("HasJob", scrape_hasjob),
+        ("developersIndia", scrape_developersindia),
+        ("Internshala", scrape_internshala),
     ]
 
     for name, scraper_fn in scrapers:
