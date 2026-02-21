@@ -5,6 +5,11 @@ import re
 from datetime import datetime
 from tracker import save_scraped_job
 
+try:
+    from googlesearch import search as google_search
+except ImportError:
+    google_search = None
+
 KEYWORDS = [
     # Core AI/LLM
     "gen ai", "generative ai", "llm", "large language model",
@@ -184,6 +189,197 @@ def scrape_github_jobs_search():
     
     return jobs
 
+GOOGLE_QUERIES = [
+    # Location-specific
+    '"ai developer" OR "ai engineer" OR "ai intern" site:careers.* OR site:jobs.* Delhi NCR',
+    '"gen ai" OR "llm" OR "langchain" hiring Noida OR Gurgaon OR Delhi',
+    '"machine learning" intern OR developer Bangalore OR Hyderabad OR Pune 2026',
+    '"rag" OR "vector database" OR "langchain" developer India',
+
+    # ATS platform-specific (catches jobs not on LinkedIn)
+    'site:lever.co "ai" OR "machine learning" India',
+    'site:boards.greenhouse.io "ai" OR "llm" India',
+    'site:ashbyhq.com "ai" OR "machine learning" India',
+
+    # Direct career pages
+    '"careers" OR "jobs" "ai developer" OR "gen ai" Noida OR Gurgaon OR Delhi 2026',
+    '"we are hiring" "ai" OR "ml" OR "llm" Delhi NCR',
+
+    # Startup-specific
+    'ai startup hiring India internship 2026',
+    '"founding engineer" OR "early engineer" ai India',
+]
+
+NAUKRI_FEEDS = [
+    "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=ai+developer",
+    "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=machine+learning",
+    "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=gen+ai",
+    "https://www.naukri.com/jobs-in-india?rss=1&keyword=langchain",
+]
+
+INDEED_FEEDS = [
+    "https://www.indeed.co.in/rss?q=ai+developer&l=Delhi+NCR",
+    "https://www.indeed.co.in/rss?q=machine+learning+intern&l=India",
+    "https://www.indeed.co.in/rss?q=gen+ai+developer&l=India",
+]
+
+
+def scrape_google_jobs():
+    """Search Google for AI/ML job listings on career pages and ATS platforms.
+    Rotates through queries — runs 3-4 per night to avoid rate limits."""
+    jobs = []
+    if google_search is None:
+        print("googlesearch-python not installed — skipping Google scraper.")
+        return jobs
+
+    # Pick 3-4 queries based on day of week (rotate across the full list)
+    day_index = datetime.now().timetuple().tm_yday  # 1-366
+    batch_size = 4
+    start = (day_index * batch_size) % len(GOOGLE_QUERIES)
+    tonight_queries = []
+    for i in range(batch_size):
+        tonight_queries.append(GOOGLE_QUERIES[(start + i) % len(GOOGLE_QUERIES)])
+
+    seen_urls = set()
+
+    for query in tonight_queries:
+        try:
+            import time
+            results = list(google_search(query, num_results=10, lang="en"))
+            for url in results:
+                if url in seen_urls:
+                    continue
+                seen_urls.add(url)
+
+                # Extract a meaningful title from the URL
+                title = url.split("/")[-1].replace("-", " ").replace("_", " ").title()
+                if len(title) < 5:
+                    title = url.split("/")[-2].replace("-", " ").title() if len(url.split("/")) > 2 else "Job Listing"
+
+                # Try to extract company from domain
+                domain = url.split("//")[-1].split("/")[0]
+                company_parts = domain.replace("www.", "").replace("careers.", "").replace("jobs.", "")
+                company = company_parts.split(".")[0].title()
+
+                job_data = {
+                    "title": title[:150],
+                    "company": company,
+                    "location": "See listing",
+                    "source": "Google Career Search",
+                    "url": url,
+                    "description": f"Found via: {query[:100]}"
+                }
+
+                # Only save if it looks like a job page
+                if matches_keywords(title) or matches_keywords(query):
+                    jobs.append(job_data)
+                    save_scraped_job(**job_data)
+
+            time.sleep(2)  # Be polite between queries
+        except Exception as e:
+            print(f"Google search error for '{query[:50]}...': {e}")
+
+    return jobs
+
+
+def scrape_naukri_rss():
+    """Parse Naukri RSS feeds for AI/ML jobs in Delhi NCR."""
+    jobs = []
+    for feed_url in NAUKRI_FEEDS:
+        try:
+            resp = requests.get(feed_url, timeout=15, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
+            })
+            if resp.status_code != 200:
+                continue
+
+            soup = BeautifulSoup(resp.content, "xml")
+            items = soup.find_all("item")
+
+            for item in items[:15]:  # Cap per feed
+                title = item.find("title")
+                link = item.find("link")
+                desc = item.find("description")
+
+                title_text = title.get_text(strip=True) if title else "Untitled"
+                link_text = link.get_text(strip=True) if link else ""
+                desc_text = desc.get_text(strip=True) if desc else ""
+
+                if not matches_keywords(title_text) and not matches_keywords(desc_text[:300]):
+                    continue
+
+                # Extract company from description if possible
+                company = "See Naukri listing"
+                company_match = re.search(r"(?:at|by|company:?)\s+([^,\n<]+)", desc_text, re.IGNORECASE)
+                if company_match:
+                    company = company_match.group(1).strip()[:80]
+
+                job_data = {
+                    "title": title_text[:150],
+                    "company": company,
+                    "location": "Delhi NCR / India",
+                    "source": "Naukri RSS",
+                    "url": link_text,
+                    "description": BeautifulSoup(desc_text[:1000], "html.parser").get_text()[:500]
+                }
+                jobs.append(job_data)
+                save_scraped_job(**job_data)
+        except Exception as e:
+            print(f"Naukri RSS error: {e}")
+
+    return jobs
+
+
+def scrape_indeed_rss():
+    """Parse Indeed India RSS feeds for AI/ML jobs."""
+    jobs = []
+    for feed_url in INDEED_FEEDS:
+        try:
+            resp = requests.get(feed_url, timeout=15, headers={
+                "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
+            })
+            if resp.status_code != 200:
+                continue
+
+            soup = BeautifulSoup(resp.content, "xml")
+            items = soup.find_all("item")
+
+            for item in items[:15]:
+                title = item.find("title")
+                link = item.find("link")
+                desc = item.find("description")
+
+                title_text = title.get_text(strip=True) if title else "Untitled"
+                link_text = link.get_text(strip=True) if link else ""
+                desc_text = desc.get_text(strip=True) if desc else ""
+
+                if not matches_keywords(title_text) and not matches_keywords(desc_text[:300]):
+                    continue
+
+                # Indeed titles often include company: "Role - Company"
+                company = "See Indeed listing"
+                if " - " in title_text:
+                    parts = title_text.rsplit(" - ", 1)
+                    if len(parts) == 2:
+                        company = parts[1].strip()[:80]
+                        title_text = parts[0].strip()
+
+                job_data = {
+                    "title": title_text[:150],
+                    "company": company,
+                    "location": "India",
+                    "source": "Indeed RSS",
+                    "url": link_text,
+                    "description": BeautifulSoup(desc_text[:1000], "html.parser").get_text()[:500]
+                }
+                jobs.append(job_data)
+                save_scraped_job(**job_data)
+        except Exception as e:
+            print(f"Indeed RSS error: {e}")
+
+    return jobs
+
+
 def scrape_wellfound_search_hint():
     """
     Wellfound doesn't have a public API and scraping it violates TOS.
@@ -242,5 +438,20 @@ def run_all_scrapers():
     arbeitnow = scrape_arbeitnow()
     all_jobs.extend(arbeitnow)
     sources_status["Arbeitnow"] = len(arbeitnow)
-    
+
+    print("Searching Google career pages...")
+    google = scrape_google_jobs()
+    all_jobs.extend(google)
+    sources_status["Google Career Search"] = len(google)
+
+    print("Scraping Naukri RSS...")
+    naukri = scrape_naukri_rss()
+    all_jobs.extend(naukri)
+    sources_status["Naukri RSS"] = len(naukri)
+
+    print("Scraping Indeed RSS...")
+    indeed = scrape_indeed_rss()
+    all_jobs.extend(indeed)
+    sources_status["Indeed RSS"] = len(indeed)
+
     return all_jobs, sources_status

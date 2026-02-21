@@ -16,6 +16,15 @@ from message_generator import (
     generate_cold_dm, generate_follow_up, generate_cover_letter,
     generate_thank_you
 )
+from jd_analyzer import full_analyze
+from resume_tailor import (
+    suggest_project_order, suggest_skill_order,
+    analyze_gaps, generate_summary_lines
+)
+from tracker import (
+    get_weekly_trend, get_platform_effectiveness,
+    get_status_funnel, get_role_analysis
+)
 
 # --- Page Config ---
 st.set_page_config(
@@ -31,8 +40,10 @@ init_db()
 st.sidebar.title("🎯 Job Search HQ")
 page = st.sidebar.radio("Navigate", [
     "📊 Dashboard",
+    "🔎 JD Analyzer",
     "🔍 Job Scraper",
     "✍️ Message Generator",
+    "📄 Resume Tailor",
     "📋 Application Tracker",
     "🔗 Quick Links"
 ])
@@ -111,6 +122,152 @@ if page == "📊 Dashboard":
     else:
         st.progress(0.0)
         st.write("**0/50** applications this week — time to start!")
+
+    # ============ ANALYTICS SECTION ============
+    st.markdown("---")
+    st.header("📈 Analytics")
+
+    # Chart 1: Weekly Application Trend
+    weekly = get_weekly_trend()
+    if not weekly.empty:
+        st.subheader("Weekly Application Trend")
+        chart_data = weekly.pivot_table(
+            index="label", columns="type", values="count", aggfunc="sum"
+        ).fillna(0)
+        st.line_chart(chart_data)
+
+    # Chart 2: Platform Effectiveness
+    plat_eff = get_platform_effectiveness()
+    if not plat_eff.empty:
+        st.subheader("Platform Effectiveness")
+        for _, row in plat_eff.iterrows():
+            col_l, col_r = st.columns([3, 1])
+            with col_l:
+                st.write(f"**{row['platform']}**")
+                st.progress(min(row['rate'] / 100, 1.0) if row['rate'] > 0 else 0.0)
+            with col_r:
+                st.write(f"{int(row['responses'])}/{int(row['total'])} ({row['rate']}%)")
+
+    # Chart 3: Status Funnel
+    funnel = get_status_funnel()
+    if sum(funnel.values()) > 0:
+        st.subheader("Application Funnel")
+        funnel_df = pd.DataFrame([
+            {"Stage": stage, "Count": count}
+            for stage, count in funnel.items()
+        ])
+        st.bar_chart(funnel_df.set_index("Stage"))
+
+        # Conversion rates
+        stages_list = list(funnel.keys())
+        conversions = []
+        for i in range(len(stages_list) - 1):
+            curr = funnel[stages_list[i]]
+            nxt = funnel[stages_list[i + 1]]
+            rate = f"{nxt/curr*100:.1f}%" if curr > 0 else "—"
+            conversions.append(f"{stages_list[i]}: {curr} → {stages_list[i+1]}: {nxt} ({rate})")
+        for c in conversions:
+            st.caption(c)
+
+    # Chart 4: Role Type Analysis
+    role_df = get_role_analysis()
+    if not role_df.empty:
+        st.subheader("Role Type Analysis")
+        st.dataframe(role_df, use_container_width=True, hide_index=True)
+
+    # Insight Box
+    if not plat_eff.empty or not role_df.empty:
+        st.subheader("💡 Insights")
+        insights = []
+
+        if not plat_eff.empty:
+            best = plat_eff.loc[plat_eff["rate"].idxmax()]
+            if best["rate"] > 0:
+                insights.append(
+                    f"Your best platform: **{best['platform']}** "
+                    f"({int(best['responses'])} responses from {int(best['total'])} applications)"
+                )
+
+        try:
+            overdue = get_follow_ups_due()
+            if len(overdue) > 0:
+                insights.append(
+                    f"You haven't followed up on **{len(overdue)} applications** that are overdue"
+                )
+        except Exception:
+            pass
+
+        if not role_df.empty and len(role_df) >= 2:
+            best_role = role_df.sort_values("Responses", ascending=False).iloc[0]
+            if best_role["Responses"] > 0:
+                insights.append(
+                    f"**{best_role['Role Keyword']}** roles are converting best — consider increasing applications for this type"
+                )
+
+        if insights:
+            for ins in insights:
+                st.info(ins)
+        else:
+            st.info("Keep applying — insights will appear after you have more data!")
+
+# ===================== JD ANALYZER =====================
+elif page == "🔎 JD Analyzer":
+    st.title("🔎 JD Analyzer")
+    st.caption("Paste a job description to get NOC compatibility, skill match %, red flags, and a verdict — in seconds.")
+
+    jd_title = st.text_input("Job Title", placeholder="e.g. AI Engineer, Software Developer")
+    jd_text = st.text_area("Paste the Full Job Description", height=300,
+                           placeholder="Paste the entire JD here...")
+
+    if st.button("Analyze", type="primary"):
+        if jd_title and jd_text:
+            result = full_analyze(jd_title, jd_text)
+
+            # --- Verdict (top) ---
+            verdict_colors = {"apply": "green", "caution": "orange", "skip": "red"}
+            vcolor = verdict_colors.get(result["verdict"], "gray")
+            st.markdown(f"### {result['verdict_label']}")
+            st.caption(result["verdict_reason"])
+            st.markdown("---")
+
+            col1, col2 = st.columns(2)
+
+            # --- NOC Compatibility ---
+            with col1:
+                st.subheader("NOC Compatibility")
+                noc = result["noc"]
+                st.markdown(noc["message"])
+                if noc["matched_duties"]:
+                    st.write("**Matched duties:**")
+                    for d in noc["matched_duties"]:
+                        st.write(f"  - {d}")
+
+            # --- Skill Match ---
+            with col2:
+                st.subheader("Skill Match")
+                skills = result["skills"]
+                pct = skills["match_percentage"]
+                st.metric("Match", f"{pct}%",
+                          delta=f"{len(skills['matched'])}/{skills['total_required']} skills")
+
+                if skills["matched"]:
+                    st.write("**\u2705 Skills you have:**")
+                    st.success(", ".join(skills["matched"]))
+                if skills["gaps"]:
+                    st.write("**\u274c Gaps:**")
+                    st.error(", ".join(skills["gaps"]))
+
+            # --- Red Flags ---
+            st.markdown("---")
+            st.subheader("Red Flags")
+            if result["red_flags"]:
+                for flag in result["red_flags"]:
+                    st.warning(f"\U0001f6a9 {flag['message']} (triggered by: *{flag['trigger']}*)")
+            else:
+                st.success("No red flags detected!")
+
+        else:
+            st.error("Enter both a job title and the job description.")
 
 # ===================== JOB SCRAPER =====================
 elif page == "🔍 Job Scraper":
@@ -279,6 +436,62 @@ elif page == "✍️ Message Generator":
                 with st.spinner("Generating..."):
                     result = generate_thank_you(client, company, interviewer, discussion)
                 st.markdown(result)
+
+# ===================== RESUME TAILOR =====================
+elif page == "📄 Resume Tailor":
+    st.title("📄 Resume Tailor")
+    st.caption("Paste a JD to get project ordering, skill reordering, tailored summaries, and gap analysis.")
+
+    rt_title = st.text_input("Job Title", placeholder="e.g. AI Engineer", key="rt_title")
+    rt_jd = st.text_area("Paste the Job Description", height=250, key="rt_jd")
+
+    if st.button("Tailor My Resume", type="primary"):
+        if rt_title and rt_jd:
+            # --- Project Order ---
+            st.subheader("1. Project Order")
+            projects = suggest_project_order(rt_jd)
+            for i, p in enumerate(projects, 1):
+                match_str = f"({p['matches']} keyword matches)"
+                if i == 1:
+                    st.markdown(f"**Lead with \u2192 {p['project']}** {match_str}")
+                else:
+                    st.write(f"{i}. {p['project']} {match_str}")
+                if p["matched_keywords"]:
+                    st.caption(f"   Matched: {', '.join(p['matched_keywords'])}")
+
+            st.markdown("---")
+
+            # --- Skills Reorder ---
+            st.subheader("2. Suggested Skills Line")
+            reordered = suggest_skill_order(rt_jd)
+            st.code(", ".join(reordered), language=None)
+            st.caption("Copy this into your resume's skills section — JD-relevant skills are first.")
+
+            st.markdown("---")
+
+            # --- Gap Analysis ---
+            st.subheader("3. Gap Analysis")
+            gaps = analyze_gaps(rt_jd)
+            if gaps:
+                for g in gaps:
+                    st.write(f"{g['emoji']} **{g['skill']}** — {g['note']}")
+            else:
+                st.success("No significant skill gaps found!")
+
+            st.markdown("---")
+
+            # --- Tailored Summary Lines (needs API) ---
+            st.subheader("4. Tailored Summary Lines")
+            if api_key:
+                client = Groq(api_key=api_key)
+                with st.spinner("Generating tailored summaries..."):
+                    summaries = generate_summary_lines(client, rt_title, rt_jd)
+                st.markdown(summaries)
+                st.caption("Pick one and replace your current resume headline.")
+            else:
+                st.info("Enter your Groq API key in the sidebar to generate AI-powered summary lines.")
+        else:
+            st.error("Enter both a job title and the job description.")
 
 # ===================== APPLICATION TRACKER =====================
 elif page == "📋 Application Tracker":
