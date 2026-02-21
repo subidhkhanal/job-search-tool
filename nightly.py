@@ -186,13 +186,13 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
     lines.append("")
 
     if jobs:
+        lines.append("| # | Job Title | Score | Location | Link |")
+        lines.append("|---|-----------|-------|----------|------|")
         for idx, j in enumerate(jobs[:15], 1):
-            title = j.get("title", "Untitled")
-            company = j.get("company", "Unknown")
-            location = j.get("location", "")
+            title = j.get("title", "Untitled")[:60]
+            company = j.get("company", "Unknown")[:25]
+            location = j.get("location", "")[:25]
             url = j.get("url", "")
-            desc = j.get("description", "")
-            source = j.get("source", "")
             score = j.get("score", 0)
 
             if score >= 40:
@@ -202,19 +202,10 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
             else:
                 tier = "\U0001f4cb"
 
-            verdict = quick_analyze(title, desc)
-
-            lines.append(f"### {tier} {idx}. {company} \u2014 {title} [{verdict}]")
-            lines.append(f"- Source: {source} | Score: {score}")
-            if location:
-                lines.append(f"- Location: {location}")
-            if url:
-                lines.append(f"- [Apply here]({url})")
-            if desc:
-                lines.append(f"- {desc[:150]}...")
-            lines.append("- [ ] Apply")
-            lines.append("- [ ] Log in tracker")
-            lines.append("")
+            job_title = f"{company} — {title}"
+            link = f"[Apply]({url})" if url else "—"
+            lines.append(f"| {tier} {idx} | {job_title} | {score} | {location} | {link} |")
+        lines.append("")
     else:
         lines.append("Scrapers came back empty. Check manual links below.")
         lines.append("")
