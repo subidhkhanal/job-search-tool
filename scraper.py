@@ -112,14 +112,32 @@ def scrape_hn_who_is_hiring():
                 # Check if India-friendly (remote or India mentioned)
                 is_india_friendly = any(kw in text_clean.lower() for kw in INDIA_KEYWORDS)
                 
-                # Extract company name (usually first line)
+                # Extract company and role from first line
+                # HN format is usually: "Company | Role | Location | Type"
                 first_line = text_clean.split("\n")[0].strip()
-                company = first_line[:100] if first_line else "See posting"
-                
+                parts = [p.strip() for p in first_line.split("|")]
+
+                if len(parts) >= 3:
+                    company = parts[0][:50]
+                    title = parts[1][:80]
+                    hn_location = parts[2][:50] if len(parts) > 2 else ""
+                elif len(parts) == 2:
+                    company = parts[0][:50]
+                    title = parts[1][:80]
+                    hn_location = ""
+                else:
+                    company = first_line[:50]
+                    title = first_line[:80]
+                    hn_location = ""
+
+                location = hn_location if hn_location else "Remote/Various"
+                if is_india_friendly and "india" not in location.lower():
+                    location += " (India mentioned)"
+
                 job_data = {
-                    "title": first_line[:150],
-                    "company": company.split("|")[0].strip() if "|" in company else company,
-                    "location": "Remote/Various" + (" (India mentioned)" if is_india_friendly else ""),
+                    "title": title,
+                    "company": company,
+                    "location": location,
                     "source": "HN Who's Hiring",
                     "url": f"https://news.ycombinator.com/item?id={comment.get('objectID', '')}",
                     "description": text_clean[:500]

@@ -189,9 +189,10 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
         lines.append("| # | Job Title | Score | Location | Link |")
         lines.append("|---|-----------|-------|----------|------|")
         for idx, j in enumerate(jobs[:15], 1):
-            title = j.get("title", "Untitled")[:60]
-            company = j.get("company", "Unknown")[:25]
-            location = j.get("location", "")[:25]
+            # Clean pipes out of all fields (they break markdown tables)
+            title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
+            company = j.get("company", "Unknown").replace("|", "/").strip()[:20]
+            location = j.get("location", "").replace("|", "/").strip()[:20]
             url = j.get("url", "")
             score = j.get("score", 0)
 
@@ -203,7 +204,7 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
                 tier = "\U0001f4cb"
 
             job_title = f"{company} — {title}"
-            link = f"[Apply]({url})" if url else "—"
+            link = f"[Apply]({url})" if url else "\u2014"
             lines.append(f"| {tier} {idx} | {job_title} | {score} | {location} | {link} |")
         lines.append("")
     else:
