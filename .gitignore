@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Generated files
+TONIGHT.md
+job_applications.db
+
+# Environment
+.env
+*.env
+
+# IDE / local
+.claude/
+=0.4.0

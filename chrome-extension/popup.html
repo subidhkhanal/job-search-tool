@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Job Apply Quick Fill</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Main View -->
+  <div id="main-view">
+    <div class="header">
+      <h1>Quick Fill</h1>
+      <button id="settings-btn" class="icon-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="info-card">
+      <span class="info-name" id="display-name">Loading...</span>
+      <span class="info-email" id="display-email"></span>
+    </div>
+
+    <button id="fill-btn" class="primary-btn">Fill Form</button>
+
+    <div id="status" class="status hidden"></div>
+  </div>
+
+  <!-- Settings View -->
+  <div id="settings-view" class="hidden">
+    <div class="header">
+      <button id="back-btn" class="icon-btn" title="Back">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"></path>
+        </svg>
+      </button>
+      <h1>Settings</h1>
+    </div>
+
+    <form id="settings-form">
+      <div class="field">
+        <label for="fullName">Full Name</label>
+        <input type="text" id="fullName" placeholder="Your full name">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="your@email.com">
+      </div>
+      <div class="field">
+        <label for="phone">Phone</label>
+        <input type="tel" id="phone" placeholder="+91 1234567890">
+      </div>
+      <div class="field">
+        <label for="linkedin">LinkedIn URL</label>
+        <input type="url" id="linkedin" placeholder="https://linkedin.com/in/...">
+      </div>
+      <div class="field">
+        <label for="github">GitHub URL</label>
+        <input type="url" id="github" placeholder="https://github.com/...">
+      </div>
+      <div class="field">
+        <label for="portfolio">Portfolio URL</label>
+        <input type="url" id="portfolio" placeholder="https://yoursite.com">
+      </div>
+      <div class="field">
+        <label for="location">Location</label>
+        <input type="text" id="location" placeholder="City, Country">
+      </div>
+      <div class="field">
+        <label for="currentRole">Current Role</label>
+        <input type="text" id="currentRole" placeholder="e.g. M.Tech AI Student">
+      </div>
+      <div class="field">
+        <label for="experience">Experience</label>
+        <input type="text" id="experience" placeholder="e.g. Fresher, 0-1 years">
+      </div>
+      <div class="field">
+        <label for="skills">Skills</label>
+        <input type="text" id="skills" placeholder="Python, LangChain, RAG...">
+      </div>
+
+      <button type="submit" class="primary-btn">Save</button>
+      <div id="save-status" class="status hidden"></div>
+    </form>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
