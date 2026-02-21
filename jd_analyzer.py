@@ -114,6 +114,14 @@ RED_FLAGS = {
         ],
         "message": "CONTRACT/TEMP — May not qualify for experience letter, confirm with employer",
     },
+    "non_english": {
+        "patterns": [
+            "deutsch", "fran\u00e7ais", "espa\u00f1ola", "wir suchen",
+            "aufgaben", "anforderungen", "stellenangebot", "nous recherchons",
+            "requisitos", "offre d'emploi",
+        ],
+        "message": "NON-ENGLISH — Job posting is not in English, likely region-locked",
+    },
 }
 
 
@@ -253,7 +261,7 @@ def detect_red_flags(title, text):
 
 def get_verdict(noc_result, skill_result, flags):
     """Generate final verdict based on all analyses."""
-    critical_flags = {"unpaid", "region_locked"}
+    critical_flags = {"unpaid", "region_locked", "non_english"}
     has_critical = any(f["type"] in critical_flags for f in flags)
 
     noc_ok = noc_result["confidence"] in ("green", "yellow")

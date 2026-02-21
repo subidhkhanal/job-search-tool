@@ -23,8 +23,11 @@ from resume_tailor import (
 )
 from tracker import (
     get_weekly_trend, get_platform_effectiveness,
-    get_status_funnel, get_role_analysis
+    get_status_funnel, get_role_analysis,
+    get_watchlist, add_to_watchlist, remove_from_watchlist,
+    get_new_watchlist_jobs, mark_watchlist_job_seen,
 )
+from watchlist import check_all_watchlist, load_starter_list, STARTER_COMPANIES
 
 # --- Page Config ---
 st.set_page_config(
@@ -42,6 +45,7 @@ page = st.sidebar.radio("Navigate", [
     "📊 Dashboard",
     "🔎 JD Analyzer",
     "🔍 Job Scraper",
+    "🏢 Watchlist",
     "✍️ Message Generator",
     "📄 Resume Tailor",
     "📋 Application Tracker",
@@ -346,6 +350,81 @@ elif page == "🔍 Job Scraper":
                         st.rerun()
         else:
             st.info("No saved jobs yet. Run the scraper first!")
+
+# ===================== WATCHLIST =====================
+elif page == "🏢 Watchlist":
+    st.title("🏢 Company Watchlist")
+    st.caption("Monitor target company career pages for new AI/ML listings via Lever, Greenhouse, Ashby, and Workable APIs.")
+
+    tab1, tab2 = st.tabs(["Manage Watchlist", "New Listings"])
+
+    with tab1:
+        col_add, col_actions = st.columns([2, 1])
+
+        with col_add:
+            st.subheader("Add Company")
+            wl_name = st.text_input("Company Name", key="wl_name")
+            wl_platform = st.selectbox("Platform", ["lever", "greenhouse", "ashby", "workable", "custom"])
+            wl_slug = st.text_input("Company Slug (from their careers URL)", key="wl_slug",
+                                    placeholder="e.g. razorpay, freshworks")
+            wl_url = st.text_input("Career Page URL (for custom)", key="wl_url",
+                                   placeholder="https://company.com/careers")
+
+            if st.button("Add to Watchlist"):
+                if wl_name and (wl_slug or wl_url):
+                    url = wl_url or f"https://api.lever.co/v0/postings/{wl_slug}"
+                    add_to_watchlist(wl_name, url, wl_platform, wl_slug)
+                    st.success(f"Added {wl_name} to watchlist!")
+                    st.rerun()
+                else:
+                    st.error("Enter company name and either a slug or URL.")
+
+        with col_actions:
+            st.subheader("Quick Actions")
+            if st.button("Load Starter List (10 companies)", type="primary"):
+                load_starter_list()
+                st.success(f"Loaded {len(STARTER_COMPANIES)} starter companies!")
+                st.rerun()
+
+            if st.button("Check All Now"):
+                with st.spinner("Checking all watchlist companies..."):
+                    results = check_all_watchlist()
+                total_new = sum(len(v) for v in results.values())
+                st.success(f"Found {total_new} new listings from {len(results)} companies!")
+                st.rerun()
+
+        st.markdown("---")
+        st.subheader("Current Watchlist")
+        watchlist = get_watchlist()
+        if not watchlist.empty:
+            for _, company in watchlist.iterrows():
+                col1, col2, col3 = st.columns([3, 2, 1])
+                with col1:
+                    st.write(f"**{company['company_name']}**")
+                with col2:
+                    st.caption(f"{company['platform_type']} | Last checked: {company['last_checked'] or 'Never'}")
+                with col3:
+                    if st.button("Remove", key=f"rm_wl_{company['id']}"):
+                        remove_from_watchlist(company['id'])
+                        st.rerun()
+        else:
+            st.info("Watchlist is empty. Add companies or load the starter list.")
+
+    with tab2:
+        st.subheader("New Listings")
+        new_jobs = get_new_watchlist_jobs()
+        if not new_jobs.empty:
+            for _, job in new_jobs.iterrows():
+                with st.expander(f"\U0001f195 {job['company_name']} \u2014 {job['job_title']}"):
+                    st.write(f"[Apply here]({job['job_url']})")
+                    col1, col2 = st.columns(2)
+                    if col1.button("Mark Seen", key=f"seen_wl_{job['id']}"):
+                        mark_watchlist_job_seen(job['id'])
+                        st.rerun()
+                    if col2.button("Go to Tracker", key=f"track_wl_{job['id']}"):
+                        st.info("Go to Application Tracker to log this application")
+        else:
+            st.info("No new listings found. Click 'Check All Now' above to refresh.")
 
 # ===================== MESSAGE GENERATOR =====================
 elif page == "✍️ Message Generator":

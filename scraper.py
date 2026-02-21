@@ -215,12 +215,14 @@ NAUKRI_FEEDS = [
     "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=machine+learning",
     "https://www.naukri.com/jobs-in-delhi-ncr?rss=1&keyword=gen+ai",
     "https://www.naukri.com/jobs-in-india?rss=1&keyword=langchain",
+    "https://www.naukri.com/jobs-in-india?rss=1&keyword=ai+intern",
 ]
 
 INDEED_FEEDS = [
     "https://www.indeed.co.in/rss?q=ai+developer&l=Delhi+NCR",
     "https://www.indeed.co.in/rss?q=machine+learning+intern&l=India",
     "https://www.indeed.co.in/rss?q=gen+ai+developer&l=India",
+    "https://www.indeed.co.in/rss?q=langchain&l=India",
 ]
 
 
