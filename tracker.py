@@ -9,27 +9,35 @@ import pandas as pd
 from datetime import datetime, timedelta
 from supabase import create_client
 
-# --- Supabase client (singleton) ---
-# Streamlit Cloud → st.secrets | GitHub Actions → os.environ
-try:
-    import streamlit as st
-    _url = st.secrets["SUPABASE_URL"]
-    _key = st.secrets["SUPABASE_KEY"]
-except Exception:
-    _url = os.environ.get("SUPABASE_URL", "")
-    _key = os.environ.get("SUPABASE_KEY", "")
-
-supabase = create_client(_url, _key) if _url and _key else None
+# --- Supabase client (lazy singleton) ---
+_supabase_client = None
 
 
 def _get_client():
-    """Return the Supabase client, raising a clear error if not configured."""
-    if supabase is None:
+    """Return the Supabase client, creating it on first call."""
+    global _supabase_client
+    if _supabase_client is not None:
+        return _supabase_client
+
+    # Streamlit Cloud → st.secrets | GitHub Actions → os.environ
+    _url = ""
+    _key = ""
+    try:
+        import streamlit as st
+        _url = st.secrets["SUPABASE_URL"]
+        _key = st.secrets["SUPABASE_KEY"]
+    except Exception:
+        _url = os.environ.get("SUPABASE_URL", "")
+        _key = os.environ.get("SUPABASE_KEY", "")
+
+    if not _url or not _key:
         raise RuntimeError(
             "Supabase not configured. Set SUPABASE_URL and SUPABASE_KEY "
             "in .streamlit/secrets.toml or environment variables."
         )
-    return supabase
+
+    _supabase_client = create_client(_url, _key)
+    return _supabase_client
 
 
 def init_db():

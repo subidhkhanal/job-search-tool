@@ -5,6 +5,7 @@ Designed to run both locally and in GitHub Actions.
 """
 
 import os
+import json
 from datetime import datetime
 from tracker import init_db, get_follow_ups_due, get_stats, get_scraped_jobs
 from scraper import (
@@ -14,6 +15,7 @@ from scraper import (
 )
 from jd_analyzer import quick_analyze
 from watchlist import check_all_watchlist
+from url_store import load_seen, save_seen, is_new, mark_seen
 
 
 def score_job(job):
@@ -103,17 +105,153 @@ def score_job(job):
     return score
 
 
-def build_battle_plan(jobs, sources_status, watchlist_results=None):
+def llm_rerank_jobs(jobs, top_n=20):
+    """
+    Use Groq LLM to re-rank the top N keyword-scored jobs.
+    Returns the same list with 'score' and 'llm_reason' fields updated.
+    Falls back gracefully if GROQ_API_KEY is missing or API fails.
+    """
+    groq_key = os.environ.get("GROQ_API_KEY")
+    if not groq_key:
+        print("GROQ_API_KEY not set — skipping LLM re-ranking.")
+        return jobs
+
+    try:
+        from groq import Groq
+    except ImportError:
+        print("groq package not available — skipping LLM re-ranking.")
+        return jobs
+
+    candidates = jobs[:top_n]
+    rest = jobs[top_n:]
+
+    # Build a compact job list for the prompt
+    job_list_text = ""
+    for i, j in enumerate(candidates, 1):
+        job_list_text += (
+            f"\n[{i}] Title: {j.get('title', '')[:80]}\n"
+            f"    Company: {j.get('company', '')[:40]}\n"
+            f"    Location: {j.get('location', '')[:40]}\n"
+            f"    Description: {j.get('description', '')[:300]}\n"
+        )
+
+    prompt = f"""You are a job relevance scorer. Rate each job listing for a candidate with this profile:
+- M.Tech AI student, graduating March 2026, based in Noida (Delhi NCR)
+- Skills: Python, LangChain, RAG pipelines, FastAPI, ChromaDB, agentic AI, web scraping, automation
+- Preference: AI/ML roles, onsite or hybrid in Delhi NCR; open to remote
+- Acceptable: intern, fresher, junior, entry-level, 0-2 years experience
+- Should be filtered out: non-English postings, unpaid, "5+ years", "senior", US/EU-only
+
+For each job, provide:
+1. A relevance score from 1-100 (100 = perfect fit)
+2. A one-line reason (max 10 words)
+
+IMPORTANT: Understand context. "No Python experience required" should score LOW for Python.
+
+Jobs to score:
+{job_list_text}
+
+Respond ONLY in this JSON format:
+{{"rankings": [{{"id": 1, "score": 85, "reason": "RAG + LangChain match, NCR location"}}, ...]}}"""
+
+    try:
+        client = Groq(api_key=groq_key)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=1500,
+        )
+        raw = response.choices[0].message.content.strip()
+        # Strip markdown code blocks if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw)
+
+        ranking_map = {r["id"]: r for r in data.get("rankings", [])}
+        for i, job in enumerate(candidates, 1):
+            if i in ranking_map:
+                r = ranking_map[i]
+                job["score"] = r["score"]
+                job["llm_reason"] = r.get("reason", "")
+
+        candidates.sort(key=lambda j: j.get("score", 0), reverse=True)
+        print(f"LLM re-ranking complete for {len(candidates)} jobs.")
+
+    except Exception as e:
+        print(f"LLM re-ranking failed: {e} — using keyword scores.")
+
+    return candidates + rest
+
+
+def _render_job_table(jobs_list, max_rows, include_verdict=True):
+    """Render a markdown table of jobs. Returns list of lines."""
+    lines = []
+    if include_verdict:
+        lines.append("| # | Job Title | Score | Verdict | LLM Take | Location | Link |")
+        lines.append("|---|-----------|-------|---------|----------|----------|------|")
+    else:
+        lines.append("| # | Job Title | Score | Location | Link |")
+        lines.append("|---|-----------|-------|----------|------|")
+
+    for idx, j in enumerate(jobs_list[:max_rows], 1):
+        title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
+        company = j.get("company", "Unknown").replace("|", "/").strip()[:20]
+        location = j.get("location", "").replace("|", "/").strip()[:20]
+        url = j.get("url", "")
+        score = j.get("score", 0)
+
+        if score >= 40:
+            tier = "\U0001f525"
+        elif score >= 20:
+            tier = "\U0001f4cc"
+        else:
+            tier = "\U0001f4cb"
+
+        job_title = f"{company} \u2014 {title}"
+        link = f"[Apply]({url})" if url else "\u2014"
+
+        if include_verdict:
+            # JD verdict
+            try:
+                verdict = quick_analyze(j.get("title", ""), j.get("description", ""))
+                parts = verdict.split("|")
+                verdict_short = f"{parts[0].strip()} \u00b7 {parts[2].strip()}" if len(parts) >= 3 else verdict
+            except Exception:
+                verdict_short = "\u2014"
+            verdict_short = verdict_short.replace("|", "\u00b7")
+
+            # LLM reason
+            llm_reason = j.get("llm_reason", "").replace("|", "\u00b7")[:40] or "\u2014"
+
+            lines.append(
+                f"| {tier} {idx} | {job_title} | {score} | {verdict_short} | {llm_reason} | {location} | {link} |"
+            )
+        else:
+            lines.append(f"| {tier} {idx} | {job_title} | {score} | {location} | {link} |")
+
+    return lines
+
+
+def build_battle_plan(jobs, sources_status, watchlist_results=None,
+                      sources_errors=None, seen=None):
     """Build the TONIGHT.md battle plan markdown with phased structure."""
     today = datetime.now().strftime("%A, %B %d, %Y")
     now = datetime.now().strftime("%I:%M %p")
     total_found = len(jobs)
+    sources_errors = sources_errors or {}
 
     # Score and sort all jobs, filter out non-English
     for job in jobs:
         job["score"] = score_job(job)
     jobs = [j for j in jobs if j["score"] > -100]
     jobs.sort(key=lambda j: j["score"], reverse=True)
+
+    # Split into new and seen
+    new_jobs = [j for j in jobs if j.get("is_new", True)]
+    seen_jobs = [j for j in jobs if not j.get("is_new", True)]
 
     # Get stats and follow-ups
     stats = {}
@@ -143,18 +281,31 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
         lines.append(f"- Interviews: {stats.get('interviews', 0)} | Offers: {stats.get('offers', 0)}")
         lines.append("")
 
-    # === Scrape Summary ===
+    # === Scrape Summary with health status ===
     lines.append("## \U0001f4e1 Scrape Summary")
     lines.append("")
-    lines.append("| Source | Jobs Found |")
-    lines.append("|--------|-----------|")
+    lines.append("| Source | Jobs Found | Status |")
+    lines.append("|--------|-----------|--------|")
     for source, count in sources_status.items():
-        lines.append(f"| {source} | {count} |")
+        if source in sources_errors:
+            status = "\u274c FAILED"
+        elif count == 0:
+            status = "\u26a0\ufe0f EMPTY"
+        else:
+            status = "\u2705 OK"
+        lines.append(f"| {source} | {count} | {status} |")
     if watchlist_results:
         wl_total = sum(len(v) for v in watchlist_results.values())
-        lines.append(f"| Watchlist | {wl_total} new |")
+        lines.append(f"| Watchlist | {wl_total} new | \u2705 OK |")
+
     high_relevance = sum(1 for j in jobs if j.get("score", 0) >= 40)
-    lines.append(f"\n**Total: {total_found}** | **High relevance: {high_relevance}**")
+    lines.append(f"\n**Total: {total_found}** | **New tonight: {len(new_jobs)}** | **High relevance: {high_relevance}**")
+
+    if sources_errors:
+        lines.append("")
+        lines.append("**Scraper failures:**")
+        for source, err in sources_errors.items():
+            lines.append(f"- {source}: `{err[:80]}`")
     lines.append("")
 
     # === Phase 1: Follow-ups ===
@@ -174,41 +325,30 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
     if watchlist_results:
         lines.append("## \U0001f3e2 Phase 1.5: Watchlist Alerts (New Listings at Target Companies)")
         lines.append("")
-        for company, new_jobs in watchlist_results.items():
-            for wj in new_jobs:
+        for company, wl_jobs in watchlist_results.items():
+            for wj in wl_jobs:
                 lines.append(f"### \U0001f195 {company} posted: \"{wj['title']}\"")
                 lines.append(f"- [Apply here]({wj['url']})")
                 lines.append("- [ ] Apply (priority \u2014 target company)")
                 lines.append("")
 
-    # === Phase 2: Top Scraped Jobs ===
-    lines.append("## \U0001f50d Phase 2: Apply to Top Scraped Jobs (10:15 \u2013 10:50 PM)")
+    # === Phase 2: Top NEW Scraped Jobs ===
+    lines.append("## \U0001f50d Phase 2: Apply to Top NEW Jobs (10:15 \u2013 10:50 PM)")
     lines.append("")
 
-    if jobs:
-        lines.append("| # | Job Title | Score | Location | Link |")
-        lines.append("|---|-----------|-------|----------|------|")
-        for idx, j in enumerate(jobs[:15], 1):
-            # Clean pipes out of all fields (they break markdown tables)
-            title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
-            company = j.get("company", "Unknown").replace("|", "/").strip()[:20]
-            location = j.get("location", "").replace("|", "/").strip()[:20]
-            url = j.get("url", "")
-            score = j.get("score", 0)
-
-            if score >= 40:
-                tier = "\U0001f525"
-            elif score >= 20:
-                tier = "\U0001f4cc"
-            else:
-                tier = "\U0001f4cb"
-
-            job_title = f"{company} — {title}"
-            link = f"[Apply]({url})" if url else "\u2014"
-            lines.append(f"| {tier} {idx} | {job_title} | {score} | {location} | {link} |")
+    if new_jobs:
+        lines.extend(_render_job_table(new_jobs, max_rows=15, include_verdict=True))
         lines.append("")
     else:
-        lines.append("Scrapers came back empty. Check manual links below.")
+        lines.append("No new jobs found tonight. Check 'Still Open' below or manual links.")
+        lines.append("")
+
+    # === Still Open (previously seen, high score) ===
+    still_open = [j for j in seen_jobs if j.get("score", 0) >= 30]
+    if still_open:
+        lines.append("### Still Open (Seen Before, Score \u2265 30)")
+        lines.append("")
+        lines.extend(_render_job_table(still_open, max_rows=10, include_verdict=False))
         lines.append("")
 
     # === Phase 3: Manual Platform Applications ===
@@ -226,8 +366,9 @@ def build_battle_plan(jobs, sources_status, watchlist_results=None):
     # === Phase 4: Cold DMs ===
     lines.append("## \U0001f3af Phase 4: Cold DMs (11:20 \u2013 11:45 PM)")
     lines.append("")
-    if jobs:
-        top3 = [j for j in jobs[:5] if j.get("score", 0) >= 30][:3]
+    all_jobs = new_jobs + seen_jobs
+    if all_jobs:
+        top3 = [j for j in all_jobs[:5] if j.get("score", 0) >= 30][:3]
         if top3:
             for j in top3:
                 lines.append(f"### Target: {j['company']} \u2014 {j['title']}")
@@ -265,10 +406,12 @@ def main():
 
     # Run all automated scrapers
     print("Running scrapers...")
-    jobs, sources_status = run_all_scrapers()
+    jobs, sources_status, sources_errors = run_all_scrapers()
     print(f"\nTotal jobs found: {len(jobs)}")
     for source, count in sources_status.items():
         print(f"  {source}: {count}")
+    if sources_errors:
+        print(f"\nFailed scrapers: {', '.join(sources_errors.keys())}")
 
     # Check watchlist companies
     print("\nChecking watchlist companies...")
@@ -280,24 +423,40 @@ def main():
     except Exception as e:
         print(f"Watchlist check skipped: {e}")
 
+    # Load seen URLs for freshness filtering
+    print("\nLoading seen URL history...")
+    seen = load_seen()
+    print(f"  {len(seen)} previously seen URLs loaded")
+
+    # Tag each job as new or seen
+    for job in jobs:
+        url = job.get("url", "")
+        job["is_new"] = is_new(url, seen)
+        mark_seen(url, seen)
+
+    new_count = sum(1 for j in jobs if j.get("is_new"))
+    print(f"  {new_count} new jobs, {len(jobs) - new_count} previously seen")
+
+    # LLM re-ranking for top candidates
+    print("\nRunning LLM re-ranking on top candidates...")
+    jobs = llm_rerank_jobs(jobs, top_n=20)
+
     # Build battle plan
     print("\nBuilding TONIGHT.md...")
-    battle_plan = build_battle_plan(jobs, sources_status, watchlist_results)
+    battle_plan = build_battle_plan(
+        jobs, sources_status, watchlist_results,
+        sources_errors=sources_errors, seen=seen,
+    )
 
     with open("TONIGHT.md", "w", encoding="utf-8") as f:
         f.write(battle_plan)
     print("TONIGHT.md written.")
 
-    # Send email
-    print("\nSending email...")
-    try:
-        from send_email import send_battle_plan_email
+    # Persist seen URLs for next run
+    save_seen(seen)
+    print(f"Saved {len(seen)} seen URLs.")
 
-        send_battle_plan_email()
-    except Exception as e:
-        print(f"Email sending skipped: {e}")
-
-    print("\nDone!")
+    print("\nDone! View the plan on the Streamlit page or check TONIGHT.md.")
 
 
 if __name__ == "__main__":

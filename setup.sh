@@ -27,18 +27,6 @@ echo ""
 
 # Check for API keys
 echo "=== API Key Check ==="
-if [ -z "$GMAIL_ADDRESS" ]; then
-    echo "  GMAIL_ADDRESS:     not set (needed for email delivery)"
-else
-    echo "  GMAIL_ADDRESS:     set"
-fi
-
-if [ -z "$GMAIL_APP_PASSWORD" ]; then
-    echo "  GMAIL_APP_PASSWORD: not set (needed for email delivery)"
-else
-    echo "  GMAIL_APP_PASSWORD: set"
-fi
-
 if [ -z "$GROQ_API_KEY" ]; then
     echo "  GROQ_API_KEY:      not set (needed for message generation)"
 else

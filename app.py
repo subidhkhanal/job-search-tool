@@ -17,7 +17,7 @@ from message_generator import (
     generate_cold_dm, generate_follow_up, generate_cover_letter,
     generate_thank_you
 )
-from jd_analyzer import full_analyze
+from jd_analyzer import full_analyze, quick_analyze
 from resume_tailor import (
     suggest_project_order, suggest_skill_order,
     analyze_gaps, generate_summary_lines
@@ -29,6 +29,8 @@ from tracker import (
     get_new_watchlist_jobs, mark_watchlist_job_seen,
 )
 from watchlist import check_all_watchlist, load_starter_list, STARTER_COMPANIES
+from nightly import score_job, llm_rerank_jobs
+from url_store import load_seen, save_seen, is_new, mark_seen
 
 # --- Page Config ---
 st.set_page_config(
@@ -74,6 +76,7 @@ init_db()
 st.sidebar.title("🎯 Job Search HQ")
 page = st.sidebar.radio("Navigate", [
     "📊 Dashboard",
+    "🎯 Tonight's Plan",
     "🔎 JD Analyzer",
     "🔍 Job Scraper",
     "🏢 Watchlist",
@@ -245,6 +248,188 @@ if page == "📊 Dashboard":
         else:
             st.info("Keep applying — insights will appear after you have more data!")
 
+# ===================== TONIGHT'S PLAN =====================
+elif page == "🎯 Tonight's Plan":
+    st.title("🎯 Tonight's Battle Plan")
+    st.caption("Run all scrapers, score jobs, and get your nightly action plan — right here.")
+
+    if st.button("🚀 Generate Tonight's Plan", type="primary"):
+        # --- Run scrapers ---
+        with st.spinner("Scraping all sources..."):
+            jobs, sources_status, sources_errors = run_all_scrapers()
+
+        # --- Scrape Summary ---
+        st.subheader("📡 Scrape Summary")
+        summary_rows = []
+        for source, count in sources_status.items():
+            if source in sources_errors:
+                status = "❌ FAILED"
+            elif count == 0:
+                status = "⚠️ EMPTY"
+            else:
+                status = "✅ OK"
+            summary_rows.append({"Source": source, "Jobs Found": count, "Status": status})
+        st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
+        if sources_errors:
+            for src, err in sources_errors.items():
+                st.error(f"{src}: {err[:100]}")
+
+        # --- Watchlist ---
+        watchlist_results = {}
+        with st.spinner("Checking watchlist companies..."):
+            try:
+                watchlist_results = check_all_watchlist()
+            except Exception as e:
+                st.warning(f"Watchlist check skipped: {e}")
+
+        # --- Freshness tagging ---
+        seen = load_seen()
+        for job in jobs:
+            url = job.get("url", "")
+            job["is_new"] = is_new(url, seen)
+            mark_seen(url, seen)
+
+        # --- Score jobs ---
+        for job in jobs:
+            job["score"] = score_job(job)
+        jobs = [j for j in jobs if j["score"] > -100]
+        jobs.sort(key=lambda j: j["score"], reverse=True)
+
+        # --- LLM re-ranking ---
+        with st.spinner("Running LLM re-ranking on top candidates..."):
+            jobs = llm_rerank_jobs(jobs, top_n=20)
+
+        # --- Save seen URLs ---
+        save_seen(seen)
+
+        # Split new vs seen
+        new_jobs = [j for j in jobs if j.get("is_new", True)]
+        seen_jobs = [j for j in jobs if not j.get("is_new", True)]
+
+        new_count = len(new_jobs)
+        high_rel = sum(1 for j in jobs if j.get("score", 0) >= 40)
+        st.markdown(f"**Total: {len(jobs)}** | **New tonight: {new_count}** | **High relevance: {high_rel}**")
+        st.markdown("---")
+
+        # --- Follow-ups ---
+        st.subheader("⏰ Phase 1: Follow-ups")
+        try:
+            follow_ups = get_follow_ups_due()
+            if not follow_ups.empty:
+                for _, fu in follow_ups.iterrows():
+                    st.warning(f"📩 Follow up: **{fu['company']}** — {fu['role']} ({fu.get('platform', '')})")
+            else:
+                st.success("No follow-ups due tonight. ✅")
+        except Exception:
+            st.success("No follow-ups due tonight. ✅")
+
+        # --- Watchlist Alerts ---
+        if watchlist_results:
+            st.markdown("---")
+            st.subheader("🏢 Watchlist Alerts")
+            for company, wl_jobs in watchlist_results.items():
+                for wj in wl_jobs:
+                    st.info(f"🆕 **{company}** posted: \"{wj['title']}\" — [Apply here]({wj['url']})")
+
+        # --- Phase 2: NEW Jobs Table ---
+        st.markdown("---")
+        st.subheader(f"🔍 Phase 2: Top NEW Jobs ({len(new_jobs)} found)")
+
+        if new_jobs:
+            table_rows = []
+            for idx, j in enumerate(new_jobs[:15], 1):
+                score = j.get("score", 0)
+                if score >= 40:
+                    tier = "🔥"
+                elif score >= 20:
+                    tier = "📌"
+                else:
+                    tier = "📋"
+
+                # Verdict
+                try:
+                    verdict = quick_analyze(j.get("title", ""), j.get("description", ""))
+                    parts = verdict.split("|")
+                    verdict_short = f"{parts[0].strip()} · {parts[2].strip()}" if len(parts) >= 3 else verdict
+                except Exception:
+                    verdict_short = "—"
+
+                llm_reason = j.get("llm_reason", "") or "—"
+
+                table_rows.append({
+                    "#": f"{tier} {idx}",
+                    "Company": j.get("company", "Unknown")[:25],
+                    "Title": j.get("title", "Untitled")[:50],
+                    "Score": score,
+                    "Verdict": verdict_short,
+                    "LLM Take": llm_reason[:40],
+                    "Location": j.get("location", "")[:25],
+                    "URL": j.get("url", ""),
+                })
+
+            df_new = pd.DataFrame(table_rows)
+            st.dataframe(
+                df_new,
+                column_config={
+                    "URL": st.column_config.LinkColumn("Apply", display_text="Apply →"),
+                },
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No new jobs found tonight. Check 'Still Open' below or manual links.")
+
+        # --- Still Open ---
+        still_open = [j for j in seen_jobs if j.get("score", 0) >= 30]
+        if still_open:
+            st.markdown("---")
+            st.subheader(f"📂 Still Open (Seen Before, Score ≥ 30) — {len(still_open)} jobs")
+            so_rows = []
+            for idx, j in enumerate(still_open[:10], 1):
+                so_rows.append({
+                    "#": idx,
+                    "Company": j.get("company", "Unknown")[:25],
+                    "Title": j.get("title", "Untitled")[:50],
+                    "Score": j.get("score", 0),
+                    "Location": j.get("location", "")[:25],
+                    "URL": j.get("url", ""),
+                })
+            st.dataframe(
+                pd.DataFrame(so_rows),
+                column_config={
+                    "URL": st.column_config.LinkColumn("Apply", display_text="Apply →"),
+                },
+                use_container_width=True,
+                hide_index=True,
+            )
+
+        # --- Phase 3: Manual Links ---
+        st.markdown("---")
+        st.subheader("💼 Phase 3: Manual Platform Applications")
+
+        col_wf, col_li = st.columns(2)
+        with col_wf:
+            st.markdown("**Wellfound (5-8 apps)**")
+            for url in scrape_wellfound_search_hint():
+                st.markdown(f"- [{url[:60]}...]({url})")
+        with col_li:
+            st.markdown("**LinkedIn Easy Apply (10-15 apps)**")
+            for item in scrape_linkedin_search_urls():
+                st.markdown(f"- [{item['query']}]({item['url']})")
+
+        # --- Phase 4: Cold DMs ---
+        all_scored = new_jobs + seen_jobs
+        top3 = [j for j in all_scored[:5] if j.get("score", 0) >= 30][:3]
+        if top3:
+            st.markdown("---")
+            st.subheader("🎯 Phase 4: Cold DM Targets")
+            for j in top3:
+                st.markdown(f"- **{j['company']}** — {j['title']} (Score: {j.get('score', 0)})")
+
+        st.markdown("---")
+        st.caption(f"Generated at {datetime.now().strftime('%I:%M %p on %A, %B %d, %Y')}")
+
 # ===================== JD ANALYZER =====================
 elif page == "🔎 JD Analyzer":
     st.title("🔎 JD Analyzer")
@@ -314,7 +499,7 @@ elif page == "🔍 Job Scraper":
     with tab1:
         if st.button("🚀 Scrape All Sources", type="primary"):
             with st.spinner("Scraping Remotive, HN Who's Hiring, Arbeitnow..."):
-                jobs, status = run_all_scrapers()
+                jobs, status, _errors = run_all_scrapers()
             
             st.success(f"Found {len(jobs)} relevant jobs!")
             for source, count in status.items():

@@ -4,6 +4,7 @@ Supports Lever, Greenhouse, Ashby, and Workable JSON APIs.
 Falls back to HTML scraping for custom career pages.
 """
 
+import time
 import requests
 from bs4 import BeautifulSoup
 from tracker import (
@@ -21,6 +22,21 @@ PLATFORMS = {
 }
 
 # AI/ML keywords to filter relevant listings
+def _http_get(url, max_attempts=3, timeout=15, **kwargs):
+    """GET request with exponential backoff retry."""
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            resp = requests.get(url, timeout=timeout, **kwargs)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt < max_attempts - 1:
+                time.sleep(2 ** attempt)
+    raise last_exc
+
+
 RELEVANT_KEYWORDS = [
     "ai", "ml", "machine learning", "deep learning", "data scien",
     "nlp", "natural language", "llm", "gen ai", "generative",
@@ -51,7 +67,7 @@ def _is_relevant(title):
 def _fetch_lever(slug):
     """Fetch jobs from Lever API."""
     url = PLATFORMS["lever"].format(slug=slug)
-    resp = requests.get(url, timeout=15)
+    resp = _http_get(url)
     if resp.status_code != 200:
         return []
 
@@ -67,7 +83,7 @@ def _fetch_lever(slug):
 def _fetch_greenhouse(slug):
     """Fetch jobs from Greenhouse API."""
     url = PLATFORMS["greenhouse"].format(slug=slug)
-    resp = requests.get(url, timeout=15)
+    resp = _http_get(url)
     if resp.status_code != 200:
         return []
 
@@ -83,7 +99,7 @@ def _fetch_greenhouse(slug):
 def _fetch_ashby(slug):
     """Fetch jobs from Ashby API."""
     url = PLATFORMS["ashby"].format(slug=slug)
-    resp = requests.get(url, timeout=15)
+    resp = _http_get(url)
     if resp.status_code != 200:
         return []
 
@@ -101,7 +117,7 @@ def _fetch_workable(slug):
     """Fetch jobs from Workable API."""
     url = PLATFORMS["workable"].format(slug=slug)
     try:
-        resp = requests.get(url, timeout=15)
+        resp = _http_get(url)
         if resp.status_code != 200:
             return []
 
@@ -120,7 +136,7 @@ def _fetch_workable(slug):
 def _fetch_custom(career_url):
     """Scrape a custom career page for AI/ML keywords in links."""
     try:
-        resp = requests.get(career_url, timeout=15, headers={
+        resp = _http_get(career_url, headers={
             "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
         })
         if resp.status_code != 200:

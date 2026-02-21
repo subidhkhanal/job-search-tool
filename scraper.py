@@ -2,8 +2,26 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import re
+import time
 from datetime import datetime
 from tracker import save_scraped_job
+
+
+def _get_with_retry(url, max_attempts=3, timeout=15, **kwargs):
+    """GET request with exponential backoff retry."""
+    last_exc = None
+    for attempt in range(max_attempts):
+        try:
+            resp = requests.get(url, timeout=timeout, **kwargs)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as exc:
+            last_exc = exc
+            if attempt < max_attempts - 1:
+                wait = 2 ** attempt
+                print(f"  Retry {attempt + 1} for {url[:60]}... (waiting {wait}s)")
+                time.sleep(wait)
+    raise last_exc
 
 try:
     from googlesearch import search as google_search
@@ -53,7 +71,7 @@ def scrape_remotive():
     jobs = []
     try:
         url = "https://remotive.com/api/remote-jobs?category=software-dev&limit=50"
-        resp = requests.get(url, timeout=15)
+        resp = _get_with_retry(url)
         data = resp.json()
         
         for job in data.get("jobs", []):
@@ -76,28 +94,37 @@ def scrape_remotive():
     
     return jobs
 
+def _is_current_hn_thread(title):
+    """Return True if the HN thread title contains the current month and year."""
+    now = datetime.now()
+    t = title.lower()
+    return now.strftime("%B").lower() in t and str(now.year) in t
+
+
 def scrape_hn_who_is_hiring():
     """Scrape HackerNews 'Who is hiring?' thread - free HN API."""
     jobs = []
     try:
         # Find the latest "Who is hiring" thread
         search_url = "https://hn.algolia.com/api/v1/search?query=who%20is%20hiring&tags=story&hitsPerPage=5"
-        resp = requests.get(search_url, timeout=15)
+        resp = _get_with_retry(search_url)
         stories = resp.json().get("hits", [])
-        
+
         hiring_story = None
         for story in stories:
-            if "who is hiring" in story.get("title", "").lower():
+            title = story.get("title", "")
+            if "who is hiring" in title.lower() and _is_current_hn_thread(title):
                 hiring_story = story
                 break
-        
+
         if not hiring_story:
+            print("  WARNING: No current-month HN 'Who is Hiring' thread found.")
             return jobs
         
         # Get comments from the thread
         story_id = hiring_story["objectID"]
         comments_url = f"https://hn.algolia.com/api/v1/search?tags=comment,story_{story_id}&hitsPerPage=200"
-        resp = requests.get(comments_url, timeout=15)
+        resp = _get_with_retry(comments_url)
         comments = resp.json().get("hits", [])
         
         for comment in comments:
@@ -154,7 +181,7 @@ def scrape_arbeitnow():
     jobs = []
     try:
         url = "https://www.arbeitnow.com/api/job-board-api"
-        resp = requests.get(url, timeout=15)
+        resp = _get_with_retry(url)
         data = resp.json()
         
         for job in data.get("data", []):
@@ -188,7 +215,7 @@ def scrape_github_jobs_search():
         # Search for recent AI job posting repos
         url = "https://api.github.com/search/repositories?q=ai+ml+jobs+india+2025+2026&sort=updated&per_page=10"
         headers = {"Accept": "application/vnd.github.v3+json"}
-        resp = requests.get(url, headers=headers, timeout=15)
+        resp = _get_with_retry(url, headers=headers)
         
         if resp.status_code == 200:
             for repo in resp.json().get("items", []):
@@ -307,11 +334,9 @@ def scrape_naukri_rss():
     jobs = []
     for feed_url in NAUKRI_FEEDS:
         try:
-            resp = requests.get(feed_url, timeout=15, headers={
+            resp = _get_with_retry(feed_url, headers={
                 "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
             })
-            if resp.status_code != 200:
-                continue
 
             soup = BeautifulSoup(resp.content, "xml")
             items = soup.find_all("item")
@@ -355,11 +380,9 @@ def scrape_indeed_rss():
     jobs = []
     for feed_url in INDEED_FEEDS:
         try:
-            resp = requests.get(feed_url, timeout=15, headers={
+            resp = _get_with_retry(feed_url, headers={
                 "User-Agent": "Mozilla/5.0 (compatible; JobSearchBot/1.0)"
             })
-            if resp.status_code != 200:
-                continue
 
             soup = BeautifulSoup(resp.content, "xml")
             items = soup.find_all("item")
@@ -440,38 +463,32 @@ def scrape_linkedin_search_urls():
     return searches
 
 def run_all_scrapers():
-    """Run all automated scrapers and return combined results."""
+    """Run all automated scrapers and return combined results with error tracking."""
     all_jobs = []
     sources_status = {}
-    
-    print("Scraping Remotive...")
-    remotive = scrape_remotive()
-    all_jobs.extend(remotive)
-    sources_status["Remotive"] = len(remotive)
-    
-    print("Scraping HN Who's Hiring...")
-    hn = scrape_hn_who_is_hiring()
-    all_jobs.extend(hn)
-    sources_status["HN Who's Hiring"] = len(hn)
-    
-    print("Scraping Arbeitnow...")
-    arbeitnow = scrape_arbeitnow()
-    all_jobs.extend(arbeitnow)
-    sources_status["Arbeitnow"] = len(arbeitnow)
+    sources_errors = {}
 
-    print("Searching Google career pages...")
-    google = scrape_google_jobs()
-    all_jobs.extend(google)
-    sources_status["Google Career Search"] = len(google)
+    scrapers = [
+        ("Remotive", scrape_remotive),
+        ("HN Who's Hiring", scrape_hn_who_is_hiring),
+        ("Arbeitnow", scrape_arbeitnow),
+        ("GitHub Repos", scrape_github_jobs_search),
+        ("Google Career Search", scrape_google_jobs),
+        ("Naukri RSS", scrape_naukri_rss),
+        ("Indeed RSS", scrape_indeed_rss),
+    ]
 
-    print("Scraping Naukri RSS...")
-    naukri = scrape_naukri_rss()
-    all_jobs.extend(naukri)
-    sources_status["Naukri RSS"] = len(naukri)
+    for name, scraper_fn in scrapers:
+        print(f"Scraping {name}...")
+        try:
+            results = scraper_fn()
+            all_jobs.extend(results)
+            sources_status[name] = len(results)
+            if len(results) == 0:
+                print(f"  WARNING: {name} returned 0 jobs")
+        except Exception as e:
+            sources_status[name] = 0
+            sources_errors[name] = str(e)
+            print(f"  ERROR: {name} failed: {e}")
 
-    print("Scraping Indeed RSS...")
-    indeed = scrape_indeed_rss()
-    all_jobs.extend(indeed)
-    sources_status["Indeed RSS"] = len(indeed)
-
-    return all_jobs, sources_status
+    return all_jobs, sources_status, sources_errors
