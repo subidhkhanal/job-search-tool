@@ -26,9 +26,17 @@ KEYWORDS = [
     "prompt engineer", "llm ops", "mlops",
 ]
 
-INDIA_KEYWORDS = ["india", "noida", "delhi", "bangalore", "bengaluru", 
+INDIA_KEYWORDS = ["india", "noida", "delhi", "bangalore", "bengaluru",
                   "hyderabad", "mumbai", "pune", "chennai", "gurgaon",
                   "gurugram", "remote"]
+
+# Priority: Delhi-NCR region (Noida-based, onsite/hybrid preferred)
+NCR_KEYWORDS = ["noida", "delhi", "gurgaon", "gurugram", "ncr",
+                "delhi-ncr", "delhi ncr", "greater noida", "faridabad",
+                "ghaziabad"]
+WORK_MODE_KEYWORDS = ["onsite", "on-site", "on site", "hybrid",
+                      "office", "in-office", "in office", "work from office",
+                      "wfo"]
 
 def matches_keywords(text):
     """Check if text matches any of our target keywords."""
@@ -183,11 +191,13 @@ def scrape_wellfound_search_hint():
     """
     base = "https://wellfound.com/jobs"
     searches = [
-        f"{base}?q=gen+ai&location=India",
-        f"{base}?q=machine+learning&location=India",
-        f"{base}?q=llm+developer&location=India",
-        f"{base}?q=ai+engineer&location=India",
-        f"{base}?q=ai+intern&location=India",
+        f"{base}?q=gen+ai&location=Delhi+NCR",
+        f"{base}?q=machine+learning&location=Delhi+NCR",
+        f"{base}?q=llm+developer&location=Delhi+NCR",
+        f"{base}?q=ai+engineer&location=Noida",
+        f"{base}?q=ai+intern&location=Delhi+NCR",
+        f"{base}?q=python+developer&location=Noida",
+        f"{base}?q=ai+intern&location=Gurgaon",
     ]
     return searches
 
@@ -198,13 +208,18 @@ def scrape_linkedin_search_urls():
     """
     base = "https://www.linkedin.com/jobs/search/?"
     searches = []
-    queries = [
-        "gen ai developer", "llm engineer", "ai ml intern",
-        "generative ai", "machine learning engineer india",
-        "ai developer intern", "rag developer"
+    queries_ncr = [
+        ("gen ai developer Delhi NCR", "Delhi%2C%20India"),
+        ("llm engineer Noida", "Noida%2C%20Uttar%20Pradesh%2C%20India"),
+        ("ai ml intern Delhi NCR", "Delhi%2C%20India"),
+        ("ai engineer Gurgaon", "Gurgaon%2C%20Haryana%2C%20India"),
+        ("python developer Noida", "Noida%2C%20Uttar%20Pradesh%2C%20India"),
+        ("machine learning engineer Delhi", "Delhi%2C%20India"),
+        ("ai developer intern", "Delhi%2C%20India"),
+        ("generative ai", "India"),
     ]
-    for q in queries:
-        url = f"{base}keywords={q.replace(' ', '%20')}&location=India&f_AL=true"
+    for q, loc in queries_ncr:
+        url = f"{base}keywords={q.replace(' ', '%20')}&location={loc}"
         searches.append({"query": q, "url": url})
     return searches
 

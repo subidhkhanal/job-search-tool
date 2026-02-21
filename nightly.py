@@ -50,13 +50,28 @@ def score_job(job):
     title_lower = job.get("title", "").lower()
     score += sum(8 for t in role_titles if t in title_lower)
 
-    # India-friendly bonus
+    # Delhi-NCR location bonus (highest priority — you're in Noida)
     location = job.get("location", "").lower()
-    if any(
-        kw in location
-        for kw in ["india", "remote", "noida", "delhi", "bangalore", "bengaluru"]
-    ):
-        score += 5
+    full_text = location + " " + text
+    ncr_keywords = ["noida", "delhi", "gurgaon", "gurugram", "ncr",
+                     "delhi-ncr", "delhi ncr", "greater noida",
+                     "faridabad", "ghaziabad"]
+    if any(kw in full_text for kw in ncr_keywords):
+        score += 20  # Big boost for Delhi-NCR
+    elif any(kw in full_text for kw in ["india", "bangalore", "bengaluru",
+                                         "hyderabad", "mumbai", "pune"]):
+        score += 5   # Other Indian cities still get a small boost
+
+    # Onsite/hybrid bonus (preferred over remote)
+    work_mode_keywords = ["onsite", "on-site", "on site", "hybrid",
+                          "office", "in-office", "in office",
+                          "work from office", "wfo"]
+    if any(kw in full_text for kw in work_mode_keywords):
+        score += 10
+
+    # Remote is acceptable but not preferred
+    if "remote" in full_text and not any(kw in full_text for kw in ncr_keywords):
+        score += 2
 
     # Fresher/intern friendly bonus
     if any(kw in text for kw in ["intern", "fresher", "entry level", "0-1 year", "junior"]):
