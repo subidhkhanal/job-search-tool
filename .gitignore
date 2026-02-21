@@ -12,7 +12,7 @@ job_applications.db
 # Environment
 .env
 *.env
+.streamlit/secrets.toml
 
 # IDE / local
 .claude/
-=0.4.0

@@ -1,215 +1,191 @@
-import sqlite3
+"""
+Database layer — Supabase (PostgreSQL) backend.
+All other modules import from here. Function signatures and return types
+are unchanged from the original SQLite version.
+"""
+
+import os
 import pandas as pd
 from datetime import datetime, timedelta
+from supabase import create_client
 
-DB_PATH = "job_applications.db"
+# --- Supabase client (singleton) ---
+# Streamlit Cloud → st.secrets | GitHub Actions → os.environ
+try:
+    import streamlit as st
+    _url = st.secrets["SUPABASE_URL"]
+    _key = st.secrets["SUPABASE_KEY"]
+except Exception:
+    _url = os.environ.get("SUPABASE_URL", "")
+    _key = os.environ.get("SUPABASE_KEY", "")
+
+supabase = create_client(_url, _key) if _url and _key else None
+
+
+def _get_client():
+    """Return the Supabase client, raising a clear error if not configured."""
+    if supabase is None:
+        raise RuntimeError(
+            "Supabase not configured. Set SUPABASE_URL and SUPABASE_KEY "
+            "in .streamlit/secrets.toml or environment variables."
+        )
+    return supabase
+
 
 def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS applications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company TEXT NOT NULL,
-        role TEXT NOT NULL,
-        type TEXT CHECK(type IN ('Job', 'Internship')) NOT NULL,
-        platform TEXT NOT NULL,
-        url TEXT,
-        date_applied TEXT NOT NULL,
-        status TEXT DEFAULT 'Applied',
-        follow_up_date TEXT,
-        noc_compatible TEXT DEFAULT 'Unknown',
-        conversion_potential TEXT DEFAULT 'N/A',
-        salary_range TEXT,
-        notes TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )''')
-    
-    c.execute('''CREATE TABLE IF NOT EXISTS scraped_jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        company TEXT,
-        location TEXT,
-        source TEXT NOT NULL,
-        url TEXT UNIQUE,
-        description TEXT,
-        score INTEGER DEFAULT 0,
-        noc_verdict TEXT,
-        skill_match INTEGER,
-        scraped_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        applied INTEGER DEFAULT 0,
-        dismissed INTEGER DEFAULT 0
-    )''')
+    """No-op. Tables are created via Supabase dashboard SQL editor."""
+    pass
 
-    c.execute('''CREATE TABLE IF NOT EXISTS watchlist (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        company_name TEXT NOT NULL,
-        career_url TEXT NOT NULL,
-        platform_type TEXT DEFAULT 'custom',
-        company_slug TEXT,
-        last_checked TEXT,
-        active INTEGER DEFAULT 1
-    )''')
 
-    c.execute('''CREATE TABLE IF NOT EXISTS watchlist_jobs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        watchlist_id INTEGER,
-        job_title TEXT,
-        job_url TEXT UNIQUE,
-        first_seen TEXT DEFAULT CURRENT_TIMESTAMP,
-        is_new INTEGER DEFAULT 1,
-        FOREIGN KEY(watchlist_id) REFERENCES watchlist(id)
-    )''')
+# ===================== APPLICATION FUNCTIONS =====================
 
-    # Migrate existing scraped_jobs table if columns are missing
-    try:
-        c.execute("SELECT score FROM scraped_jobs LIMIT 1")
-    except sqlite3.OperationalError:
-        c.execute("ALTER TABLE scraped_jobs ADD COLUMN score INTEGER DEFAULT 0")
-        c.execute("ALTER TABLE scraped_jobs ADD COLUMN noc_verdict TEXT")
-        c.execute("ALTER TABLE scraped_jobs ADD COLUMN skill_match INTEGER")
-
-    conn.commit()
-    conn.close()
-
-def add_application(company, role, job_type, platform, url="", 
-                    noc_compatible="Unknown", conversion="N/A", 
+def add_application(company, role, job_type, platform, url="",
+                    noc_compatible="Unknown", conversion="N/A",
                     salary="", notes=""):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
+    db = _get_client()
     today = datetime.now().strftime("%Y-%m-%d")
     follow_up = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
-    
-    c.execute('''INSERT INTO applications 
-        (company, role, type, platform, url, date_applied, follow_up_date, 
-         noc_compatible, conversion_potential, salary_range, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (company, role, job_type, platform, url, today, follow_up,
-         noc_compatible, conversion, salary, notes))
-    
-    conn.commit()
-    conn.close()
+    db.table("applications").insert({
+        "company": company,
+        "role": role,
+        "type": job_type,
+        "platform": platform,
+        "url": url,
+        "date_applied": today,
+        "follow_up_date": follow_up,
+        "noc_compatible": noc_compatible,
+        "conversion_potential": conversion,
+        "salary_range": salary,
+        "notes": notes,
+    }).execute()
+
 
 def update_status(app_id, new_status):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE applications SET status = ? WHERE id = ?", (new_status, app_id))
-    conn.commit()
-    conn.close()
+    db = _get_client()
+    db.table("applications").update({"status": new_status}).eq("id", app_id).execute()
+
 
 def get_all_applications():
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM applications ORDER BY date_applied DESC", conn)
-    conn.close()
-    return df
+    db = _get_client()
+    resp = db.table("applications").select("*").order("date_applied", desc=True).execute()
+    return pd.DataFrame(resp.data)
+
 
 def get_follow_ups_due():
-    conn = sqlite3.connect(DB_PATH)
+    db = _get_client()
     today = datetime.now().strftime("%Y-%m-%d")
-    df = pd.read_sql_query(
-        "SELECT * FROM applications WHERE follow_up_date <= ? AND status = 'Applied'",
-        conn, params=(today,))
-    conn.close()
-    return df
+    resp = (db.table("applications")
+            .select("*")
+            .lte("follow_up_date", today)
+            .eq("status", "Applied")
+            .execute())
+    return pd.DataFrame(resp.data)
+
 
 def get_stats():
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    
+    db = _get_client()
+    resp = db.table("applications").select("status, type, platform").execute()
+    df = pd.DataFrame(resp.data)
+
     stats = {}
-    c.execute("SELECT COUNT(*) FROM applications")
-    stats['total'] = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM applications WHERE status = 'Applied'")
-    stats['applied'] = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM applications WHERE status = 'Interview Scheduled'")
-    stats['interviews'] = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM applications WHERE status = 'Offer'")
-    stats['offers'] = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM applications WHERE status = 'Rejected'")
-    stats['rejected'] = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM applications WHERE type = 'Job'")
-    stats['jobs'] = c.fetchone()[0]
-    
-    c.execute("SELECT COUNT(*) FROM applications WHERE type = 'Internship'")
-    stats['internships'] = c.fetchone()[0]
-    
-    c.execute("SELECT platform, COUNT(*) as count FROM applications GROUP BY platform ORDER BY count DESC")
-    stats['by_platform'] = c.fetchall()
-    
-    c.execute("""SELECT platform, COUNT(*) as total,
-        SUM(CASE WHEN status IN ('Interview Scheduled', 'Interviewed', 'Offer') THEN 1 ELSE 0 END) as responses
-        FROM applications GROUP BY platform""")
-    stats['response_rates'] = c.fetchall()
-    
-    conn.close()
+    if df.empty:
+        stats['total'] = 0
+        stats['applied'] = 0
+        stats['interviews'] = 0
+        stats['offers'] = 0
+        stats['rejected'] = 0
+        stats['jobs'] = 0
+        stats['internships'] = 0
+        stats['by_platform'] = []
+        stats['response_rates'] = []
+        return stats
+
+    stats['total'] = len(df)
+    stats['applied'] = len(df[df['status'] == 'Applied'])
+    stats['interviews'] = len(df[df['status'] == 'Interview Scheduled'])
+    stats['offers'] = len(df[df['status'] == 'Offer'])
+    stats['rejected'] = len(df[df['status'] == 'Rejected'])
+    stats['jobs'] = len(df[df['type'] == 'Job'])
+    stats['internships'] = len(df[df['type'] == 'Internship'])
+
+    # by_platform: list of (platform, count) tuples
+    stats['by_platform'] = list(
+        df.groupby('platform').size().sort_values(ascending=False).items()
+    )
+
+    # response_rates: list of (platform, total, responses) tuples
+    response_rates = []
+    for platform, group in df.groupby('platform'):
+        total = len(group)
+        responses = len(group[group['status'].isin(
+            ['Interview Scheduled', 'Interviewed', 'Offer']
+        )])
+        response_rates.append((platform, total, responses))
+    stats['response_rates'] = response_rates
+
     return stats
+
+
+def delete_application(app_id):
+    db = _get_client()
+    db.table("applications").delete().eq("id", app_id).execute()
+
+
+# ===================== SCRAPED JOBS FUNCTIONS =====================
 
 def save_scraped_job(title, company, location, source, url, description="",
                      score=0, noc_verdict="", skill_match=0):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
+    db = _get_client()
     try:
-        c.execute('''INSERT OR IGNORE INTO scraped_jobs
-            (title, company, location, source, url, description, score, noc_verdict, skill_match)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (title, company, location, source, url, description, score, noc_verdict, skill_match))
-        conn.commit()
+        db.table("scraped_jobs").upsert({
+            "title": title,
+            "company": company,
+            "location": location,
+            "source": source,
+            "url": url,
+            "description": description,
+            "score": score,
+            "noc_verdict": noc_verdict or "",
+            "skill_match": skill_match,
+        }, on_conflict="url", ignore_duplicates=True).execute()
     except Exception:
         pass
-    conn.close()
 
 
 def update_scraped_job_analysis(job_id, score, noc_verdict, skill_match):
     """Update a scraped job with analysis results."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "UPDATE scraped_jobs SET score = ?, noc_verdict = ?, skill_match = ? WHERE id = ?",
-        (score, noc_verdict, skill_match, job_id),
-    )
-    conn.commit()
-    conn.close()
+    db = _get_client()
+    db.table("scraped_jobs").update({
+        "score": score,
+        "noc_verdict": noc_verdict,
+        "skill_match": skill_match,
+    }).eq("id", job_id).execute()
+
 
 def get_scraped_jobs(source=None):
-    conn = sqlite3.connect(DB_PATH)
-    query = "SELECT * FROM scraped_jobs WHERE dismissed = 0 AND applied = 0"
+    db = _get_client()
+    query = db.table("scraped_jobs").select("*").eq("dismissed", 0).eq("applied", 0)
     if source:
-        query += f" AND source = '{source}'"
-    query += " ORDER BY scraped_at DESC"
-    df = pd.read_sql_query(query, conn)
-    conn.close()
-    return df
+        query = query.eq("source", source)
+    resp = query.order("scraped_at", desc=True).execute()
+    return pd.DataFrame(resp.data)
+
 
 def mark_scraped_job(job_id, action):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
+    db = _get_client()
     if action == 'applied':
-        c.execute("UPDATE scraped_jobs SET applied = 1 WHERE id = ?", (job_id,))
+        db.table("scraped_jobs").update({"applied": 1}).eq("id", job_id).execute()
     elif action == 'dismissed':
-        c.execute("UPDATE scraped_jobs SET dismissed = 1 WHERE id = ?", (job_id,))
-    conn.commit()
-    conn.close()
+        db.table("scraped_jobs").update({"dismissed": 1}).eq("id", job_id).execute()
 
-def delete_application(app_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM applications WHERE id = ?", (app_id,))
-    conn.commit()
-    conn.close()
 
+# ===================== ANALYTICS FUNCTIONS =====================
 
 def get_weekly_trend():
     """Get application counts grouped by week, split by type."""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        "SELECT date_applied, type FROM applications ORDER BY date_applied",
-        conn,
-    )
-    conn.close()
+    db = _get_client()
+    resp = db.table("applications").select("date_applied, type").order("date_applied").execute()
+    df = pd.DataFrame(resp.data)
     if df.empty:
         return pd.DataFrame()
 
@@ -224,48 +200,44 @@ def get_weekly_trend():
 
 def get_platform_effectiveness():
     """Get total applications and positive responses per platform."""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        """SELECT platform,
-                  COUNT(*) as total,
-                  SUM(CASE WHEN status IN ('Interview Scheduled','Interviewed','Offer')
-                      THEN 1 ELSE 0 END) as responses
-           FROM applications
-           GROUP BY platform
-           ORDER BY total DESC""",
-        conn,
-    )
-    conn.close()
-    if not df.empty:
-        df["rate"] = (df["responses"] / df["total"] * 100).round(1)
-    return df
+    db = _get_client()
+    resp = db.table("applications").select("platform, status").execute()
+    df = pd.DataFrame(resp.data)
+    if df.empty:
+        return df
+
+    grouped = df.groupby("platform").apply(
+        lambda g: pd.Series({
+            "total": len(g),
+            "responses": len(g[g["status"].isin(
+                ["Interview Scheduled", "Interviewed", "Offer"]
+            )]),
+        })
+    ).reset_index().sort_values("total", ascending=False)
+    grouped["rate"] = (grouped["responses"] / grouped["total"] * 100).round(1)
+    return grouped
 
 
 def get_status_funnel():
     """Get counts at each status stage for a funnel view."""
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
+    db = _get_client()
+    resp = db.table("applications").select("status").execute()
+    df = pd.DataFrame(resp.data)
     stages = [
         "Applied", "Follow-up Sent", "Interview Scheduled",
         "Interviewed", "Offer",
     ]
     counts = {}
     for stage in stages:
-        c.execute(
-            "SELECT COUNT(*) FROM applications WHERE status = ?", (stage,)
-        )
-        counts[stage] = c.fetchone()[0]
-    conn.close()
+        counts[stage] = len(df[df["status"] == stage]) if not df.empty else 0
     return counts
 
 
 def get_role_analysis():
     """Group applications by role keywords and show conversion rates."""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        "SELECT role, status FROM applications", conn
-    )
-    conn.close()
+    db = _get_client()
+    resp = db.table("applications").select("role, status").execute()
+    df = pd.DataFrame(resp.data)
     if df.empty:
         return pd.DataFrame()
 
@@ -301,80 +273,68 @@ def get_role_analysis():
 # ===================== WATCHLIST FUNCTIONS =====================
 
 def add_to_watchlist(company_name, career_url, platform_type="custom", company_slug=""):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        """INSERT OR IGNORE INTO watchlist
-           (company_name, career_url, platform_type, company_slug)
-           VALUES (?, ?, ?, ?)""",
-        (company_name, career_url, platform_type, company_slug),
-    )
-    conn.commit()
-    conn.close()
+    db = _get_client()
+    try:
+        db.table("watchlist").insert({
+            "company_name": company_name,
+            "career_url": career_url,
+            "platform_type": platform_type,
+            "company_slug": company_slug,
+        }).execute()
+    except Exception:
+        pass
 
 
 def remove_from_watchlist(company_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM watchlist_jobs WHERE watchlist_id = ?", (company_id,))
-    c.execute("DELETE FROM watchlist WHERE id = ?", (company_id,))
-    conn.commit()
-    conn.close()
+    db = _get_client()
+    db.table("watchlist_jobs").delete().eq("watchlist_id", company_id).execute()
+    db.table("watchlist").delete().eq("id", company_id).execute()
 
 
 def get_watchlist():
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        "SELECT * FROM watchlist WHERE active = 1 ORDER BY company_name", conn
-    )
-    conn.close()
-    return df
+    db = _get_client()
+    resp = (db.table("watchlist")
+            .select("*")
+            .eq("active", 1)
+            .order("company_name")
+            .execute())
+    return pd.DataFrame(resp.data)
 
 
 def save_watchlist_job(watchlist_id, job_title, job_url):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
+    db = _get_client()
     try:
-        c.execute(
-            """INSERT OR IGNORE INTO watchlist_jobs
-               (watchlist_id, job_title, job_url)
-               VALUES (?, ?, ?)""",
-            (watchlist_id, job_title, job_url),
-        )
-        conn.commit()
+        db.table("watchlist_jobs").upsert({
+            "watchlist_id": watchlist_id,
+            "job_title": job_title,
+            "job_url": job_url,
+        }, on_conflict="job_url", ignore_duplicates=True).execute()
     except Exception:
         pass
-    conn.close()
 
 
 def get_new_watchlist_jobs():
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query(
-        """SELECT wj.*, w.company_name, w.career_url
-           FROM watchlist_jobs wj
-           JOIN watchlist w ON wj.watchlist_id = w.id
-           WHERE wj.is_new = 1
-           ORDER BY wj.first_seen DESC""",
-        conn,
-    )
-    conn.close()
-    return df
+    db = _get_client()
+    resp = (db.table("watchlist_jobs")
+            .select("*, watchlist(company_name, career_url)")
+            .eq("is_new", 1)
+            .order("first_seen", desc=True)
+            .execute())
+    data = resp.data
+    for row in data:
+        wl = row.pop("watchlist", {}) or {}
+        row["company_name"] = wl.get("company_name", "")
+        row["career_url"] = wl.get("career_url", "")
+    return pd.DataFrame(data)
 
 
 def mark_watchlist_job_seen(job_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("UPDATE watchlist_jobs SET is_new = 0 WHERE id = ?", (job_id,))
-    conn.commit()
-    conn.close()
+    db = _get_client()
+    db.table("watchlist_jobs").update({"is_new": 0}).eq("id", job_id).execute()
 
 
 def update_watchlist_checked(watchlist_id):
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute(
-        "UPDATE watchlist SET last_checked = ? WHERE id = ?",
-        (datetime.now().strftime("%Y-%m-%d %H:%M"), watchlist_id),
-    )
-    conn.commit()
-    conn.close()
+    db = _get_client()
+    db.table("watchlist").update({
+        "last_checked": datetime.now().strftime("%Y-%m-%d %H:%M"),
+    }).eq("id", watchlist_id).execute()

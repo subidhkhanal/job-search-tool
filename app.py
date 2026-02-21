@@ -1,3 +1,4 @@
+import hmac
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
@@ -9,7 +10,7 @@ from tracker import (
     delete_application
 )
 from scraper import (
-    run_all_scrapers, scrape_wellfound_search_hint, 
+    run_all_scrapers, scrape_wellfound_search_hint,
     scrape_linkedin_search_urls
 )
 from message_generator import (
@@ -35,6 +36,36 @@ st.set_page_config(
     page_icon="🎯",
     layout="wide"
 )
+
+
+# --- Authentication ---
+def check_password():
+    """Show login form and return True if credentials are correct."""
+    def password_entered():
+        if (
+            hmac.compare_digest(st.session_state["username"], st.secrets.credentials.username)
+            and hmac.compare_digest(st.session_state["password"], st.secrets.credentials.password)
+        ):
+            st.session_state["authenticated"] = True
+            del st.session_state["password"]
+        else:
+            st.session_state["authenticated"] = False
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("🔒 Login")
+    st.text_input("Username", key="username")
+    st.text_input("Password", type="password", key="password")
+    st.button("Log in", on_click=password_entered)
+
+    if "authenticated" in st.session_state and not st.session_state["authenticated"]:
+        st.error("Wrong username or password.")
+    return False
+
+
+if not check_password():
+    st.stop()
 
 # --- Init ---
 init_db()
