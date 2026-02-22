@@ -107,6 +107,16 @@ def is_internship(text):
     text_lower = text.lower()
     return any(kw in text_lower for kw in INTERN_KEYWORDS)
 
+
+def is_global_or_india(location_text):
+    """For remote-first boards where location = geo-restriction, not remote status.
+    Accept if no geo restriction (empty) or India/Nepal/worldwide allowed."""
+    if not location_text or not location_text.strip():
+        return True  # empty = no restriction = worldwide
+    text_lower = location_text.lower()
+    return any(kw in text_lower for kw in ALLOWED_LOCATION_KEYWORDS)
+
+
 def scrape_remotive():
     """Scrape Remotive API - free, no key needed, remote jobs."""
     jobs = []
@@ -469,7 +479,8 @@ def scrape_internshala():
 
 
 def scrape_remoteok():
-    """Scrape RemoteOK API - free, no auth, remote jobs."""
+    """Scrape RemoteOK API - free, no auth, remote jobs.
+    RemoteOK is inherently remote; location field = geo-restriction."""
     jobs = []
     try:
         resp = _get_with_retry("https://remoteok.com/api",
@@ -479,23 +490,22 @@ def scrape_remoteok():
         for job in data[1:]:
             title = job.get("position", "")
             desc = job.get("description", "")
-            location = job.get("location", "Remote")
-            combined = title + " " + desc[:500] + " " + location
+            tags = " ".join(job.get("tags", []))
+            location = job.get("location", "")
+            combined = title + " " + desc[:500] + " " + tags
 
-            if not (matches_keywords(title) or matches_keywords(desc[:500])):
+            if not (matches_keywords(title) or matches_keywords(tags) or matches_keywords(desc[:500])):
                 continue
             if not is_internship(combined):
                 continue
-            # RemoteOK is inherently remote, but verify for location
-            if not is_allowed_location(combined):
-                continue
-            if not is_remote(combined):
+            # RemoteOK is all-remote; location = geo-restriction
+            if not is_global_or_india(location):
                 continue
 
             job_data = {
                 "title": title[:150],
                 "company": job.get("company", "Unknown")[:80],
-                "location": location[:80] or "Remote",
+                "location": (location or "Remote (Worldwide)")[:80],
                 "source": "RemoteOK",
                 "url": job.get("url", ""),
                 "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
@@ -508,7 +518,8 @@ def scrape_remoteok():
 
 
 def scrape_himalayas():
-    """Scrape Himalayas API - free, no auth, remote jobs with intern filter."""
+    """Scrape Himalayas API - free, no auth, remote-first board.
+    locationRestrictions = geo-restriction, seniority = level."""
     jobs = []
     try:
         for offset in range(0, 100, 50):
@@ -521,21 +532,21 @@ def scrape_himalayas():
                 title = job.get("title", "")
                 desc = job.get("description", "")
                 company = job.get("companyName", "Unknown")
-                emp_type = (job.get("employmentType", "") or "").lower()
+                seniority = [s.lower() for s in job.get("seniority", [])]
+                categories = " ".join(job.get("categories", []))
                 locations = job.get("locationRestrictions", [])
-                location = ", ".join(locations[:3]) if locations else "Remote"
-                combined = title + " " + desc[:500] + " " + location + " " + emp_type
+                location = ", ".join(locations[:3]) if locations else ""
+                combined = title + " " + desc[:500] + " " + categories
 
-                # Accept if employment type is intern, or if it matches keywords + intern check
-                is_intern_type = "intern" in emp_type
-                if not is_intern_type:
+                # Check intern/entry-level via seniority field or text
+                is_entry = any("entry" in s or "intern" in s or "junior" in s for s in seniority)
+                if not is_entry:
                     if not is_internship(combined):
                         continue
-                if not (matches_keywords(title) or matches_keywords(desc[:500])):
+                if not (matches_keywords(title) or matches_keywords(desc[:500]) or matches_keywords(categories)):
                     continue
-                if not is_remote(combined):
-                    continue
-                if not is_allowed_location(combined):
+                # Himalayas is remote-first; locationRestrictions = geo-restriction
+                if not is_global_or_india(location):
                     continue
 
                 app_link = job.get("applicationLink", "") or job.get("guid", "")
@@ -543,7 +554,7 @@ def scrape_himalayas():
                 job_data = {
                     "title": title[:150],
                     "company": company[:80],
-                    "location": location[:80] or "Remote",
+                    "location": (location or "Remote (Worldwide)")[:80],
                     "source": "Himalayas",
                     "url": app_link,
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
@@ -558,7 +569,8 @@ def scrape_himalayas():
 
 
 def scrape_jobicy():
-    """Scrape Jobicy API - free, no auth, remote jobs with internship filter."""
+    """Scrape Jobicy API - free, no auth, remote job board.
+    jobGeo = geo-restriction for remote workers, not remote status."""
     jobs = []
     tags = ["ai", "machine-learning", "python", "data-science", "nlp"]
     try:
@@ -571,27 +583,27 @@ def scrape_jobicy():
             for job in data.get("jobs", []):
                 title = job.get("jobTitle", "")
                 desc = job.get("jobDescription", "") or job.get("jobExcerpt", "")
-                location = job.get("jobGeo", "Remote")
+                location = job.get("jobGeo", "")
                 job_types = job.get("jobType", [])
                 job_level = (job.get("jobLevel", "") or "").lower()
-                combined = title + " " + desc[:500] + " " + location + " " + job_level
+                combined = title + " " + desc[:500] + " " + job_level
 
-                # Check for internship via jobType list or keywords
+                # Check for internship via jobType list, jobLevel, or text
                 is_intern_type = any("intern" in str(jt).lower() for jt in job_types)
-                if not is_intern_type:
+                is_entry_level = any(kw in job_level for kw in ["entry", "junior", "intern"])
+                if not is_intern_type and not is_entry_level:
                     if not is_internship(combined):
                         continue
                 if not (matches_keywords(title) or matches_keywords(desc[:500])):
                     continue
-                if not is_remote(combined):
-                    continue
-                if not is_allowed_location(combined):
+                # Jobicy is all-remote; jobGeo = geo-restriction
+                if not is_global_or_india(location):
                     continue
 
                 job_data = {
                     "title": title[:150],
                     "company": job.get("companyName", "Unknown")[:80],
-                    "location": location[:80] or "Remote",
+                    "location": (location or "Remote (Worldwide)")[:80],
                     "source": "Jobicy",
                     "url": job.get("url", ""),
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
@@ -606,29 +618,36 @@ def scrape_jobicy():
 
 
 def scrape_themuse():
-    """Scrape The Muse API - free, no auth, has native Internship level filter."""
+    """Scrape The Muse API - free, no auth, has native Internship level filter.
+    Fetches remote/flexible + India-based internships."""
     jobs = []
+    # Query both remote/flexible and India-based internships
+    api_urls = [
+        "https://www.themuse.com/api/public/jobs?level=Internship&location=Flexible%20%2F%20Remote&page=0",
+        "https://www.themuse.com/api/public/jobs?level=Internship&location=Flexible%20%2F%20Remote&page=1",
+        "https://www.themuse.com/api/public/jobs?level=Internship&location=India&page=0",
+    ]
+    seen_ids = set()
     try:
-        for page in range(0, 3):
-            resp = _get_with_retry(
-                f"https://www.themuse.com/api/public/jobs?level=Internship&page={page}",
-                headers={"User-Agent": "Mozilla/5.0"})
+        for api_url in api_urls:
+            resp = _get_with_retry(api_url, headers={"User-Agent": "Mozilla/5.0"})
             data = resp.json()
 
             for job in data.get("results", []):
+                job_id = job.get("id")
+                if job_id in seen_ids:
+                    continue
+                seen_ids.add(job_id)
+
                 title = job.get("name", "")
                 desc = job.get("contents", "")
                 company_obj = job.get("company", {}) or {}
                 company = company_obj.get("name", "Unknown")
                 locations = [loc.get("name", "") for loc in job.get("locations", [])]
-                location = ", ".join(locations[:3]) if locations else "Remote"
+                location = ", ".join(locations[:3]) if locations else "Flexible / Remote"
                 combined = title + " " + desc[:500] + " " + location
 
                 if not (matches_keywords(title) or matches_keywords(desc[:500])):
-                    continue
-                if not is_remote(combined):
-                    continue
-                if not is_allowed_location(combined):
                     continue
 
                 refs = job.get("refs", {}) or {}
@@ -711,7 +730,8 @@ def scrape_jooble():
 
 
 def scrape_simplify_internships():
-    """Parse SimplifyJobs Summer2026-Internships GitHub repo for curated listings."""
+    """Parse SimplifyJobs Summer2026-Internships GitHub repo for curated listings.
+    The README uses HTML <table> tags, not pipe-delimited markdown."""
     import re
     jobs = []
     try:
@@ -719,33 +739,37 @@ def scrape_simplify_internships():
         resp = _get_with_retry(url, headers={"User-Agent": "Mozilla/5.0"})
         text = resp.text
 
-        # Parse markdown table rows: | Company | Role | Location | Link | Date |
-        table_pattern = re.compile(
-            r'^\|\s*(?:\*\*)?(.+?)(?:\*\*)?\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|',
-            re.MULTILINE
-        )
+        # Parse HTML table rows: <tr><td>Company</td><td>Role</td><td>Location</td><td>Link</td><td>Date</td></tr>
+        tr_pattern = re.compile(r'<tr>\s*(.*?)\s*</tr>', re.DOTALL)
+        td_pattern = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL)
 
-        for match in table_pattern.finditer(text):
-            company = BeautifulSoup(match.group(1).strip(), "html.parser").get_text()
-            title = BeautifulSoup(match.group(2).strip(), "html.parser").get_text()
-            location = BeautifulSoup(match.group(3).strip(), "html.parser").get_text()
-
-            # Skip table headers
-            if company.lower() in ("company", "---", ""):
-                continue
-            if "---" in title:
+        for tr_match in tr_pattern.finditer(text):
+            tds = td_pattern.findall(tr_match.group(1))
+            if len(tds) < 4:
                 continue
 
-            # Extract URL from markdown link [text](url)
-            link_match = re.search(r'\[.*?\]\((https?://[^)]+)\)', match.group(4))
-            url = link_match.group(1) if link_match else ""
+            company = BeautifulSoup(tds[0], "html.parser").get_text(strip=True)
+            title = BeautifulSoup(tds[1], "html.parser").get_text(strip=True)
+            location = BeautifulSoup(tds[2], "html.parser").get_text(strip=True)
+
+            # Skip headers
+            if company.lower() in ("company", "---", "") or not title:
+                continue
+
+            # Extract apply URL from the link column
+            link_match = re.search(r'href="(https?://[^"]+)"', tds[3])
+            apply_url = link_match.group(1) if link_match else ""
 
             combined = title + " " + company + " " + location
-            if not (matches_keywords(combined)):
+            # All entries are internships — only filter by AI/ML keywords
+            if not matches_keywords(combined):
                 continue
-            if not is_remote(combined):
-                continue
-            if not is_allowed_location(combined):
+            # Accept remote or India-based internships
+            location_lower = location.lower()
+            is_remote_job = any(kw in location_lower for kw in ["remote", "anywhere", "worldwide", "flexible"])
+            is_india_job = any(kw in location_lower for kw in ["india", "bangalore", "bengaluru", "hyderabad",
+                                                                "mumbai", "pune", "delhi", "noida", "chennai"])
+            if not is_remote_job and not is_india_job:
                 continue
 
             job_data = {
@@ -753,7 +777,7 @@ def scrape_simplify_internships():
                 "company": company[:80],
                 "location": location[:80] or "Remote",
                 "source": "SimplifyJobs",
-                "url": url,
+                "url": apply_url,
                 "description": f"Summer 2026 Internship: {title} at {company}",
             }
             jobs.append(job_data)
@@ -903,65 +927,55 @@ def scrape_wellfound_graphql():
 
 
 def scrape_unstop():
-    """Scrape Unstop (D2C) internships page via their internal API."""
+    """Scrape Unstop (D2C) internships via their search API."""
     jobs = []
+    search_queries = ["ai ml internship", "machine learning intern", "data science intern",
+                      "python intern", "gen ai internship"]
     try:
-        # Unstop has an internal API that returns JSON for opportunities
-        api_url = "https://unstop.com/api/public/opportunity/search-new"
-        payload = {
-            "opportunity": ["internships"],
-            "oppstatus": "open",
-            "sort": "recency",
-            "page": 1,
-            "per_page": 30,
-            "filters": {
-                "keyword": "ai ml",
-            }
-        }
-        resp = requests.post(
-            api_url,
-            json=payload,
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "Origin": "https://unstop.com",
-                "Referer": "https://unstop.com/internships",
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        for query in search_queries:
+            # Unstop search API (public, no auth)
+            api_url = f"https://unstop.com/api/public/opportunity/search-result?opportunity=internships&searchTerm={quote_plus(query)}&oppstatus=open&sort=recency&per_page=20"
+            resp = requests.get(
+                api_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    "Accept": "application/json, text/plain, */*",
+                    "Referer": "https://unstop.com/internships",
+                },
+                timeout=15,
+            )
+            if resp.status_code == 403:
+                # Fallback: try scraping HTML search page
+                break
+            resp.raise_for_status()
+            data = resp.json()
 
-        opportunities = data.get("data", {}).get("data", [])
-        for opp in opportunities:
-            title = opp.get("title", "")
-            org = opp.get("organisation", {}) or {}
-            company = org.get("name", "Unknown")
-            location = opp.get("city", "") or "India"
-            if isinstance(location, list):
-                location = ", ".join(location[:3])
-            slug = opp.get("public_url", "") or opp.get("slug", "")
-            url = f"https://unstop.com/internships/{slug}" if slug and not slug.startswith("http") else slug
+            opportunities = data.get("data", {}).get("data", [])
+            for opp in opportunities:
+                title = opp.get("title", "")
+                org = opp.get("organisation", {}) or {}
+                company = org.get("name", "Unknown")
+                location = opp.get("city", "") or "India"
+                if isinstance(location, list):
+                    location = ", ".join(location[:3])
+                slug = opp.get("public_url", "") or opp.get("slug", "")
+                url = f"https://unstop.com/internships/{slug}" if slug and not slug.startswith("http") else (slug or "")
 
-            combined = title + " " + company + " " + str(location)
-            if not (matches_keywords(title) or matches_keywords(combined)):
-                continue
-            if not is_remote(combined):
-                continue
-            if not is_allowed_location(combined):
-                continue
+                combined = title + " " + company + " " + str(location)
+                if not (matches_keywords(title) or matches_keywords(combined)):
+                    continue
 
-            job_data = {
-                "title": title[:150],
-                "company": company[:80],
-                "location": str(location)[:80] or "Remote",
-                "source": "Unstop",
-                "url": url,
-                "description": f"Internship: {title} at {company}",
-            }
-            jobs.append(job_data)
-            save_scraped_job(**job_data)
+                job_data = {
+                    "title": title[:150],
+                    "company": company[:80],
+                    "location": str(location)[:80] or "India",
+                    "source": "Unstop",
+                    "url": url,
+                    "description": f"Internship: {title} at {company}",
+                }
+                jobs.append(job_data)
+                save_scraped_job(**job_data)
+            time.sleep(2)
     except Exception as e:
         print(f"Unstop error: {e}")
     return jobs

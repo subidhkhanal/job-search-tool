@@ -266,7 +266,6 @@ elif page == "Tonight's Plan":
             jobs, sources_status, sources_errors = run_all_scrapers()
 
         # --- Scrape Summary ---
-        st.subheader("📡 Scrape Summary")
         summary_rows = []
         for source, count in sources_status.items():
             if source in sources_errors:
@@ -276,11 +275,6 @@ elif page == "Tonight's Plan":
             else:
                 status = "✅ OK"
             summary_rows.append({"Source": source, "Jobs Found": count, "Status": status})
-        st.dataframe(pd.DataFrame(summary_rows), width='stretch', hide_index=True)
-
-        if sources_errors:
-            for src, err in sources_errors.items():
-                st.error(f"{src}: {err[:100]}")
 
         # --- Score jobs ---
         for job in jobs:
@@ -295,89 +289,157 @@ elif page == "Tonight's Plan":
         # --- Filter low-relevance jobs ---
         jobs = [j for j in jobs if j.get("score", 0) >= 20]
 
-        high_rel = sum(1 for j in jobs if j.get("score", 0) >= 40)
-        st.markdown(f"**Total: {len(jobs)}** | **High relevance: {high_rel}**")
-        st.markdown("---")
+        # --- Build jobs table rows ---
+        table_rows = []
+        for j in jobs[:20]:
+            score = j.get("score", 0)
+            llm_reason = j.get("llm_reason", "") or "—"
+            text = (j.get("location", "") + " " + j.get("description", "") + " " + j.get("title", "")).lower()
+            if any(kw in text for kw in ["onsite", "on-site", "on site", "in-office", "in office", "work from office", "wfo"]):
+                work_mode = "🏢 Onsite"
+            elif "hybrid" in text:
+                work_mode = "🔀 Hybrid"
+            elif "remote" in text:
+                work_mode = "🏠 Remote"
+            else:
+                work_mode = "—"
+            table_rows.append({
+                "Mode": work_mode,
+                "Company": j.get("company", "Unknown"),
+                "Title": j.get("title", "Untitled")[:60],
+                "Score": score,
+                "LLM Take": llm_reason[:40],
+                "URL": j.get("url", ""),
+                "Career Page": generate_career_url(j.get("company", ""), j.get("title", "")),
+                "Source": j.get("source", "Other"),
+            })
+
+        # --- Build cold DM targets ---
+        cold_dm_targets = [
+            {"company": j["company"], "title": j["title"], "score": j.get("score", 0)}
+            for j in jobs[:5] if j.get("score", 0) >= 30
+        ][:3]
 
         # --- Follow-ups ---
-        st.subheader("⏰ Phase 1: Follow-ups")
         try:
             follow_ups = get_follow_ups_due()
-            if not follow_ups.empty:
-                for _, fu in follow_ups.iterrows():
-                    st.warning(f"📩 Follow up: **{fu['company']}** — {fu['role']} ({fu.get('platform', '')})")
-            else:
-                st.success("No follow-ups due tonight. ✅")
+            follow_up_list = [
+                {"company": fu["company"], "role": fu["role"], "platform": fu.get("platform", "")}
+                for _, fu in follow_ups.iterrows()
+            ] if not follow_ups.empty else []
         except Exception:
+            follow_up_list = []
+
+        # --- Manual links ---
+        wf_urls = scrape_wellfound_search_hint()
+        li_urls = scrape_linkedin_search_urls()
+
+        # --- Store everything in session state ---
+        st.session_state["plan"] = {
+            "summary_rows": summary_rows,
+            "sources_errors": dict(sources_errors) if sources_errors else {},
+            "jobs_count": len(jobs),
+            "high_rel": sum(1 for j in jobs if j.get("score", 0) >= 40),
+            "table_rows": table_rows,
+            "follow_ups": follow_up_list,
+            "cold_dm_targets": cold_dm_targets,
+            "wf_urls": wf_urls,
+            "li_urls": li_urls,
+            "generated_at": datetime.now().strftime('%I:%M %p on %A, %B %d, %Y'),
+        }
+
+    # --- Render from session state ---
+    if "plan" in st.session_state:
+        plan = st.session_state["plan"]
+
+        st.subheader("📡 Scrape Summary")
+        st.dataframe(pd.DataFrame(plan["summary_rows"]), width='stretch', hide_index=True)
+
+        if plan["sources_errors"]:
+            for src, err in plan["sources_errors"].items():
+                st.error(f"{src}: {err[:100]}")
+
+        st.markdown(f"**Total: {plan['jobs_count']}** | **High relevance: {plan['high_rel']}**")
+        st.markdown("---")
+
+        # Phase 1: Follow-ups
+        st.subheader("⏰ Phase 1: Follow-ups")
+        if plan["follow_ups"]:
+            for fu in plan["follow_ups"]:
+                st.warning(f"📩 Follow up: **{fu['company']}** — {fu['role']} ({fu['platform']})")
+        else:
             st.success("No follow-ups due tonight. ✅")
 
-        # --- Phase 2: Top Jobs Table ---
+        # Phase 2: Top Jobs
         st.markdown("---")
-        st.subheader(f"🔍 Phase 2: Top Jobs ({len(jobs)} found)")
+        st.subheader(f"🔍 Phase 2: Top Jobs ({plan['jobs_count']} found)")
+        if plan["table_rows"]:
+            # Track which jobs have been logged this session
+            if "logged_jobs" not in st.session_state:
+                st.session_state["logged_jobs"] = set()
 
-        if jobs:
-            table_rows = []
-            for idx, j in enumerate(jobs[:20], 1):
-                score = j.get("score", 0)
-                llm_reason = j.get("llm_reason", "") or "—"
-
-                # Detect work mode from job text
-                text = (j.get("location", "") + " " + j.get("description", "") + " " + j.get("title", "")).lower()
-                if any(kw in text for kw in ["onsite", "on-site", "on site", "in-office", "in office", "work from office", "wfo"]):
-                    work_mode = "🏢 Onsite"
-                elif "hybrid" in text:
-                    work_mode = "🔀 Hybrid"
-                elif "remote" in text:
-                    work_mode = "🏠 Remote"
-                else:
-                    work_mode = "—"
-
-                table_rows.append({
-                    "Mode": work_mode,
-                    "Title": j.get("title", "Untitled")[:60],
-                    "Score": score,
-                    "LLM Take": llm_reason[:40],
-                    "URL": j.get("url", ""),
-                    "Career Page": generate_career_url(j.get("company", ""), j.get("title", "")),
-                })
-
-            df_jobs = pd.DataFrame(table_rows)
-            st.dataframe(
-                df_jobs,
-                column_config={
-                    "URL": st.column_config.LinkColumn("Apply", display_text="Apply →"),
-                    "Career Page": st.column_config.LinkColumn("Career Page", display_text="Career →"),
-                },
-                width='stretch',
-                hide_index=True,
-            )
+            for idx, row in enumerate(plan["table_rows"]):
+                col_info, col_score, col_links, col_log = st.columns([4, 1, 2, 1])
+                with col_info:
+                    st.markdown(f"**{row['Company']}** — {row['Title']}  {row['Mode']}")
+                    if row["LLM Take"] != "—":
+                        st.caption(row["LLM Take"])
+                with col_score:
+                    st.metric("Score", row["Score"], label_visibility="collapsed")
+                with col_links:
+                    link_parts = []
+                    if row["URL"]:
+                        link_parts.append(f"[Apply →]({row['URL']})")
+                    if row["Career Page"]:
+                        link_parts.append(f"[Career →]({row['Career Page']})")
+                    st.markdown(" | ".join(link_parts) if link_parts else "—")
+                with col_log:
+                    job_key = f"{row['Company']}_{row['Title']}"
+                    if job_key in st.session_state["logged_jobs"]:
+                        st.success("✅", icon="✅")
+                    elif st.button("📋 Log", key=f"log_job_{idx}"):
+                        # Map scraper source to platform name
+                        source_map = {
+                            "hn": "YC Startups", "wellfound": "Wellfound",
+                            "linkedin": "LinkedIn", "internshala": "Internshala",
+                            "devsindia": "Reddit",
+                        }
+                        platform = source_map.get(row.get("Source", "").lower(), "Other")
+                        add_application(
+                            company=row["Company"],
+                            role=row["Title"],
+                            job_type="Internship",
+                            platform=platform,
+                            url=row.get("URL", ""),
+                        )
+                        st.session_state["logged_jobs"].add(job_key)
+                        st.rerun()
+                st.divider()
         else:
             st.info("No relevant jobs found tonight. Try the manual links below.")
 
-        # --- Phase 3: Manual Links ---
+        # Phase 3: Manual Links
         st.markdown("---")
         st.subheader("💼 Phase 3: Manual Platform Applications")
-
         col_wf, col_li = st.columns(2)
         with col_wf:
             st.markdown("**Wellfound (5-8 apps)**")
-            for url in scrape_wellfound_search_hint():
+            for url in plan["wf_urls"]:
                 st.markdown(f"- [{url[:60]}...]({url})")
         with col_li:
             st.markdown("**LinkedIn Easy Apply (10-15 apps)**")
-            for item in scrape_linkedin_search_urls():
+            for item in plan["li_urls"]:
                 st.markdown(f"- [{item['query']}]({item['url']})")
 
-        # --- Phase 4: Cold DMs ---
-        top3 = [j for j in jobs[:5] if j.get("score", 0) >= 30][:3]
-        if top3:
+        # Phase 4: Cold DMs
+        if plan["cold_dm_targets"]:
             st.markdown("---")
             st.subheader("🎯 Phase 4: Cold DM Targets")
-            for j in top3:
-                st.markdown(f"- **{j['company']}** — {j['title']} (Score: {j.get('score', 0)})")
+            for j in plan["cold_dm_targets"]:
+                st.markdown(f"- **{j['company']}** — {j['title']} (Score: {j['score']})")
 
         st.markdown("---")
-        st.caption(f"Generated at {datetime.now().strftime('%I:%M %p on %A, %B %d, %Y')}")
+        st.caption(f"Generated at {plan['generated_at']}")
 
 # ===================== JD ANALYZER =====================
 elif page == "JD Analyzer":
@@ -700,33 +762,29 @@ elif page == "Resume Tailor":
 # ===================== APPLICATION TRACKER =====================
 elif page == "Tracker":
     st.title("📋 Application Tracker")
-    
-    tab1, tab2 = st.tabs(["➕ Add Application", "📊 View All"])
-    
-    with tab1:
-        st.subheader("Log New Application")
-        
+
+    with st.expander("➕ Add New Application", expanded=False):
         col1, col2 = st.columns(2)
         with col1:
             company = st.text_input("Company")
             role = st.text_input("Role Title")
             job_type = st.selectbox("Type", ["Internship", "Job"])
             platform = st.selectbox("Applied via", [
-                "Wellfound", "LinkedIn", "YC Startups", "Instahyre", 
-                "Cutshort", "Internshala", "Direct/Career Page", 
+                "Wellfound", "LinkedIn", "YC Startups", "Instahyre",
+                "Cutshort", "Internshala", "Direct/Career Page",
                 "Cold DM", "Referral", "Reddit", "Other"
             ])
         with col2:
             url = st.text_input("Job URL (optional)")
             noc = st.selectbox("NOC Compatible?", ["✅ Yes", "⚠️ Maybe", "❌ No", "Unknown"])
             conversion = st.selectbox("Conversion Potential", [
-                "N/A (Full-time job)", "PPO mentioned", "Likely", 
+                "N/A (Full-time job)", "PPO mentioned", "Likely",
                 "Possible", "Unlikely", "Unknown"
             ])
             salary = st.text_input("Salary/Stipend (optional)")
-        
+
         notes = st.text_area("Notes (optional)", placeholder="e.g., Founder replied on Twitter, interview next week")
-        
+
         if st.button("Log Application", type="primary"):
             if company and role:
                 add_application(company, role, job_type, platform, url,
@@ -735,9 +793,9 @@ elif page == "Tracker":
                 st.balloons()
             else:
                 st.error("Company and Role are required.")
-    
-    with tab2:
-        st.subheader("All Applications")
+
+    st.markdown("---")
+    st.subheader("All Applications")
         
         apps = get_all_applications()
         
@@ -808,12 +866,7 @@ elif page == "Tracker":
         else:
             st.info("No applications logged yet. Start applying!")
 
-    # --- Mini Demos Tab ---
-    with st.sidebar.container():
-        pass  # placeholder for sidebar
-    if "tab_demos" not in dir():
-        pass
-    # Add Mini Demos section below the tracker tabs
+    # --- Mini Demos Section ---
     st.markdown("---")
     st.subheader("🛠️ Mini Demos")
 
