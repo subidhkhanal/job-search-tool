@@ -21,6 +21,9 @@ from scraper import (
 )
 from jd_analyzer import quick_ats
 
+# Companies to exclude from battle plan (scams, bad reputation, etc.)
+BLOCKED_COMPANIES = {"turing"}
+
 
 def score_job(job):
     """Score a job listing based on profile match. Higher = better fit."""
@@ -296,6 +299,7 @@ def build_battle_plan(jobs, sources_status, sources_errors=None):
         job["score"] = score_job(job)
     jobs = [j for j in jobs if j["score"] > -100]
     jobs = [j for j in jobs if j.get("score", 0) >= 20]
+    jobs = [j for j in jobs if j.get("company", "").strip().lower() not in BLOCKED_COMPANIES]
     jobs.sort(key=lambda j: j["score"], reverse=True)
 
     # Get stats, follow-ups, referrals, demos

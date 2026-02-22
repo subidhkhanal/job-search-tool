@@ -7,7 +7,7 @@ from streamlit_option_menu import option_menu
 
 from tracker import (
     init_db, add_application, update_status, get_all_applications,
-    get_follow_ups_due, get_stats, get_scraped_jobs, mark_scraped_job,
+    get_follow_ups_due, get_stats,
     delete_application,
     get_weekly_trend, get_platform_effectiveness,
     get_status_funnel, get_role_analysis,
@@ -75,11 +75,11 @@ init_db()
 page = option_menu(
     menu_title=None,
     options=[
-        "Dashboard", "Tonight's Plan", "JD Analyzer", "Job Scraper",
+        "Dashboard", "Tonight's Plan", "JD Analyzer",
         "Messages", "Resume Tailor", "Tracker", "Referral Network", "Quick Links",
     ],
     icons=[
-        "bar-chart-fill", "bullseye", "search", "binoculars",
+        "bar-chart-fill", "bullseye", "search",
         "pencil-square", "file-earmark-text", "clipboard-check", "people-fill", "link-45deg",
     ],
     default_index=0,
@@ -550,86 +550,6 @@ elif page == "JD Analyzer":
                         st.caption(f"\u2014 {s}")
             else:
                 st.error("Paste a job description first.")
-
-# ===================== JOB SCRAPER =====================
-elif page == "Job Scraper":
-    st.title("🔍 Job Scraper")
-    st.caption("Scrapes AI/ML jobs from free public APIs. LinkedIn and Wellfound links are for manual browsing (automation gets you banned).")
-    
-    tab1, tab2, tab3 = st.tabs(["🤖 Auto-Scrape", "🔗 Manual Search Links", "📥 Saved Jobs"])
-    
-    with tab1:
-        if st.button("🚀 Scrape All Sources", type="primary"):
-            with st.spinner("Scraping Remotive, HN Who's Hiring, Arbeitnow..."):
-                jobs, status, _errors = run_all_scrapers()
-            
-            st.success(f"Found {len(jobs)} relevant jobs!")
-            for source, count in status.items():
-                st.write(f"  • {source}: {count} jobs")
-            
-            if jobs:
-                for job in jobs[:20]:  # Show top 20
-                    with st.expander(f"🏢 {job['company']} — {job['title']}"):
-                        st.write(f"**Location:** {job['location']}")
-                        st.write(f"**Source:** {job['source']}")
-                        if job['url']:
-                            st.write(f"**Link:** {job['url']}")
-                        career_url = generate_career_url(job['company'], job['title'])
-                        st.write(f"**Career Page:** [Search on Google]({career_url})")
-                        if job.get('description'):
-                            st.write(f"**Preview:** {job['description'][:300]}...")
-                        
-                        col1, col2 = st.columns(2)
-                        # Use unique keys based on job URL or index
-                        job_key = job.get('url', '') or job['title']
-                        if col1.button("✅ Mark as Applied", key=f"apply_{hash(job_key)}"):
-                            st.info("➡️ Go to Application Tracker to log this application")
-    
-    with tab2:
-        st.subheader("Wellfound (Manual — Don't Automate)")
-        st.write("Open these links and apply manually on Wellfound:")
-        for url in scrape_wellfound_search_hint():
-            st.markdown(f"  🔗 [{url}]({url})")
-        
-        st.markdown("---")
-        
-        st.subheader("LinkedIn (Manual — Don't Automate)")
-        st.write("Open these links and use Easy Apply:")
-        for item in scrape_linkedin_search_urls():
-            st.markdown(f"  🔗 **{item['query']}**: [{item['url'][:80]}...]({item['url']})")
-        
-        st.markdown("---")
-        
-        st.subheader("Other Manual Sources")
-        st.markdown("""
-        - 🔗 [YC Work at a Startup](https://www.workatastartup.com/jobs?query=ai+ml&demographic=any&role=eng&sortBy=created_desc)
-        - 🔗 [r/developersIndia Hiring Thread](https://www.reddit.com/r/developersIndia/search/?q=who%27s+hiring&sort=new)
-        - 🔗 [Internshala AI/ML](https://internshala.com/internships/artificial-intelligence-internship/)
-        - 🔗 [Instahyre](https://www.instahyre.com/search-jobs/?designation=ai-ml-engineer)
-        - 🔗 [Cutshort](https://cutshort.io/jobs?q=ai+ml)
-        """)
-    
-    with tab3:
-        st.subheader("📥 Saved Scraped Jobs")
-        saved = get_scraped_jobs()
-        if len(saved) > 0:
-            for _, job in saved.iterrows():
-                with st.expander(f"{job['company']} — {job['title']} ({job['source']})"):
-                    st.write(f"**Location:** {job['location']}")
-                    if job['url']:
-                        st.write(f"**Link:** {job['url']}")
-                    if job.get('description'):
-                        st.write(job['description'][:300])
-                    
-                    col1, col2 = st.columns(2)
-                    if col1.button("❌ Dismiss", key=f"dismiss_{job['id']}"):
-                        mark_scraped_job(job['id'], 'dismissed')
-                        st.rerun()
-                    if col2.button("✅ Applied", key=f"applied_{job['id']}"):
-                        mark_scraped_job(job['id'], 'applied')
-                        st.rerun()
-        else:
-            st.info("No saved jobs yet. Run the scraper first!")
 
 # ===================== MESSAGE GENERATOR =====================
 elif page == "Messages":
