@@ -796,75 +796,75 @@ elif page == "Tracker":
 
     st.markdown("---")
     st.subheader("All Applications")
-        
-        apps = get_all_applications()
-        
-        if len(apps) > 0:
-            # Filters
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                filter_status = st.selectbox("Filter by Status", 
-                    ["All", "Applied", "Follow-up Sent", "Interview Scheduled", 
-                     "Interviewed", "Offer", "Rejected"])
-            with col2:
-                filter_type = st.selectbox("Filter by Type", ["All", "Job", "Internship"])
-            with col3:
-                filter_platform = st.selectbox("Filter by Platform", 
-                    ["All"] + list(apps['platform'].unique()))
-            
-            filtered = apps.copy()
-            if filter_status != "All":
-                filtered = filtered[filtered['status'] == filter_status]
-            if filter_type != "All":
-                filtered = filtered[filtered['type'] == filter_type]
-            if filter_platform != "All":
-                filtered = filtered[filtered['platform'] == filter_platform]
-            
-            st.write(f"Showing {len(filtered)} applications")
-            
-            for _, row in filtered.iterrows():
-                status_emoji = {
-                    "Applied": "📨", "Follow-up Sent": "📩", 
-                    "Interview Scheduled": "📅", "Interviewed": "🤝",
-                    "Offer": "🎉", "Rejected": "❌"
-                }.get(row['status'], "📨")
-                
-                type_emoji = "🏢" if row['type'] == "Job" else "🎓"
-                
-                with st.expander(f"{status_emoji} {type_emoji} {row['company']} — {row['role']} | {row['status']}"):
-                    col1, col2, col3 = st.columns(3)
-                    col1.write(f"**Platform:** {row['platform']}")
-                    col2.write(f"**Applied:** {row['date_applied']}")
-                    col3.write(f"**Follow-up:** {row['follow_up_date']}")
-                    
-                    if row['url']:
-                        st.write(f"**URL:** {row['url']}")
-                    st.write(f"**NOC:** {row['noc_compatible']} | **Conversion:** {row['conversion_potential']}")
-                    if row['notes']:
-                        st.write(f"**Notes:** {row['notes']}")
-                    
-                    # Update status
-                    new_status = st.selectbox(
-                        "Update Status", 
-                        ["Applied", "Follow-up Sent", "Interview Scheduled", 
-                         "Interviewed", "Offer", "Rejected"],
-                        key=f"status_{row['id']}",
-                        index=["Applied", "Follow-up Sent", "Interview Scheduled", 
-                               "Interviewed", "Offer", "Rejected"].index(row['status'])
-                        if row['status'] in ["Applied", "Follow-up Sent", "Interview Scheduled", 
-                                             "Interviewed", "Offer", "Rejected"] else 0
-                    )
-                    
-                    col_a, col_b = st.columns(2)
-                    if col_a.button("Update", key=f"update_{row['id']}"):
-                        update_status(row['id'], new_status)
-                        st.success("Updated!")
-                        st.rerun()
-                    if col_b.button("🗑️ Delete", key=f"del_{row['id']}"):
-                        delete_application(row['id'])
-                        st.rerun()
-        else:
-            st.info("No applications logged yet. Start applying!")
+
+    apps = get_all_applications()
+
+    if len(apps) > 0:
+        # Filters
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            filter_status = st.selectbox("Filter by Status",
+                ["All", "Applied", "Follow-up Sent", "Interview Scheduled",
+                 "Interviewed", "Offer", "Rejected"])
+        with col2:
+            filter_type = st.selectbox("Filter by Type", ["All", "Job", "Internship"])
+        with col3:
+            filter_platform = st.selectbox("Filter by Platform",
+                ["All"] + list(apps['platform'].unique()))
+
+        filtered = apps.copy()
+        if filter_status != "All":
+            filtered = filtered[filtered['status'] == filter_status]
+        if filter_type != "All":
+            filtered = filtered[filtered['type'] == filter_type]
+        if filter_platform != "All":
+            filtered = filtered[filtered['platform'] == filter_platform]
+
+        st.write(f"Showing {len(filtered)} applications")
+
+        for _, row in filtered.iterrows():
+            status_emoji = {
+                "Applied": "📨", "Follow-up Sent": "📩",
+                "Interview Scheduled": "📅", "Interviewed": "🤝",
+                "Offer": "🎉", "Rejected": "❌"
+            }.get(row['status'], "📨")
+
+            type_emoji = "🏢" if row['type'] == "Job" else "🎓"
+
+            with st.expander(f"{status_emoji} {type_emoji} {row['company']} — {row['role']} | {row['status']}"):
+                col1, col2, col3 = st.columns(3)
+                col1.write(f"**Platform:** {row['platform']}")
+                col2.write(f"**Applied:** {row['date_applied']}")
+                col3.write(f"**Follow-up:** {row['follow_up_date']}")
+
+                if row['url']:
+                    st.write(f"**URL:** {row['url']}")
+                st.write(f"**NOC:** {row['noc_compatible']} | **Conversion:** {row['conversion_potential']}")
+                if row['notes']:
+                    st.write(f"**Notes:** {row['notes']}")
+
+                # Update status
+                new_status = st.selectbox(
+                    "Update Status",
+                    ["Applied", "Follow-up Sent", "Interview Scheduled",
+                     "Interviewed", "Offer", "Rejected"],
+                    key=f"status_{row['id']}",
+                    index=["Applied", "Follow-up Sent", "Interview Scheduled",
+                           "Interviewed", "Offer", "Rejected"].index(row['status'])
+                    if row['status'] in ["Applied", "Follow-up Sent", "Interview Scheduled",
+                                         "Interviewed", "Offer", "Rejected"] else 0
+                )
+
+                col_a, col_b = st.columns(2)
+                if col_a.button("Update", key=f"update_{row['id']}"):
+                    update_status(row['id'], new_status)
+                    st.success("Updated!")
+                    st.rerun()
+                if col_b.button("🗑️ Delete", key=f"del_{row['id']}"):
+                    delete_application(row['id'])
+                    st.rerun()
+    else:
+        st.info("No applications logged yet. Start applying!")
 
     # --- Mini Demos Section ---
     st.markdown("---")

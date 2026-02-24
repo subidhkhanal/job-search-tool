@@ -675,12 +675,6 @@ def scrape_jooble():
     import os
     api_key = os.environ.get("JOOBLE_API_KEY", "")
     if not api_key:
-        try:
-            import streamlit as st
-            api_key = st.secrets.get("JOOBLE_API_KEY", "")
-        except Exception:
-            pass
-    if not api_key:
         print("Jooble: No JOOBLE_API_KEY set — skipping.")
         return []
 

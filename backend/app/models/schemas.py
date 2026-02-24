@@ -1,0 +1,143 @@
+from pydantic import BaseModel
+from typing import Optional
+
+
+# ---- Auth ----
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+# ---- Applications ----
+
+class AddApplicationRequest(BaseModel):
+    company: str
+    role: str
+    job_type: str = "Job"
+    platform: str = ""
+    url: str = ""
+    noc_compatible: str = "Unknown"
+    conversion: str = "N/A"
+    salary: str = ""
+    notes: str = ""
+
+
+class UpdateStatusRequest(BaseModel):
+    status: str
+
+
+# ---- Scraped Jobs ----
+
+class MarkScrapedJobRequest(BaseModel):
+    action: str  # "applied" or "dismissed"
+
+
+# ---- Messages ----
+
+class ColdDMRequest(BaseModel):
+    company: str
+    role: str
+    company_desc: str = ""
+    platform: str = "LinkedIn"
+    project_link: str = ""
+
+
+class FollowUpRequest(BaseModel):
+    company: str
+    role: str
+    days: int = 7
+    platform: str = "LinkedIn"
+
+
+class CoverLetterRequest(BaseModel):
+    company: str
+    role: str
+    jd: str
+    company_info: str = ""
+
+
+class ThankYouRequest(BaseModel):
+    company: str
+    interviewer: str
+    discussion: str = ""
+
+
+class ReferralRequestBody(BaseModel):
+    contact_name: str
+    contact_role: str = ""
+    company: str
+    role_applying_for: str
+    relationship: str = ""
+
+
+class DemoOutreachRequest(BaseModel):
+    company: str
+    role: str
+    demo_url: str
+    demo_description: str
+    company_desc: str = ""
+
+
+# ---- JD Analyzer ----
+
+class FullAnalyzeRequest(BaseModel):
+    title: str
+    description: str
+    company: Optional[str] = None
+    custom_resume: Optional[str] = None
+
+
+class ATSCheckRequest(BaseModel):
+    jd_text: str
+    custom_resume: Optional[str] = None
+
+
+# ---- Resume Tailor ----
+
+class ResumeTailorRequest(BaseModel):
+    title: str
+    jd_text: str
+
+
+# ---- Company Research ----
+
+class CompanyResearchRequest(BaseModel):
+    company_name: str
+
+
+# ---- Referrals ----
+
+class AddReferralRequest(BaseModel):
+    contact_name: str
+    company: str
+    contact_role: str = ""
+    relationship: str = ""
+    linkedin_url: str = ""
+    email: str = ""
+    notes: str = ""
+
+
+class UpdateReferralStatusRequest(BaseModel):
+    status: str
+
+
+# ---- Mini Demos ----
+
+class AddDemoRequest(BaseModel):
+    company: str
+    role: str
+    demo_idea: str
+
+
+class UpdateDemoRequest(BaseModel):
+    status: Optional[str] = None
+    github_url: Optional[str] = None
+    demo_url: Optional[str] = None
+    hours_spent: Optional[float] = None
+    result: Optional[str] = None

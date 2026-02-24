@@ -19,21 +19,13 @@ def _get_client():
     if _supabase_client is not None:
         return _supabase_client
 
-    # Streamlit Cloud → st.secrets | GitHub Actions → os.environ
-    _url = ""
-    _key = ""
-    try:
-        import streamlit as st
-        _url = st.secrets["SUPABASE_URL"]
-        _key = st.secrets["SUPABASE_KEY"]
-    except Exception:
-        _url = os.environ.get("SUPABASE_URL", "")
-        _key = os.environ.get("SUPABASE_KEY", "")
+    _url = os.environ.get("SUPABASE_URL", "")
+    _key = os.environ.get("SUPABASE_KEY", "")
 
     if not _url or not _key:
         raise RuntimeError(
             "Supabase not configured. Set SUPABASE_URL and SUPABASE_KEY "
-            "in .streamlit/secrets.toml or environment variables."
+            "as environment variables."
         )
 
     _supabase_client = create_client(_url, _key)
