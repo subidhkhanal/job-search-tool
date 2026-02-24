@@ -3,7 +3,6 @@ from bs4 import BeautifulSoup
 import time
 from datetime import datetime
 from urllib.parse import quote_plus
-from tracker import save_scraped_job
 
 
 def _get_with_retry(url, max_attempts=3, timeout=15, **kwargs):
@@ -135,7 +134,6 @@ def scrape_remotive():
                 "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500]
             }
             jobs.append(job_data)
-            save_scraped_job(**job_data)
     except Exception as e:
         print(f"Remotive error: {e}")
 
@@ -201,7 +199,6 @@ def scrape_hn_who_is_hiring():
                 "description": text_clean[:500]
             }
             jobs.append(job_data)
-            save_scraped_job(**job_data)
     except Exception as e:
         print(f"HN error: {e}")
 
@@ -234,7 +231,6 @@ def scrape_arbeitnow():
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500]
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
     except Exception as e:
         print(f"Arbeitnow error: {e}")
 
@@ -300,7 +296,6 @@ def scrape_jobspy():
                     "description": desc[:500],
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
 
             time.sleep(3)  # Pause between queries
         except Exception as e:
@@ -345,7 +340,6 @@ def scrape_hasjob():
                     "description": title,
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
     except Exception as e:
         print(f"HasJob error: {e}")
     return jobs
@@ -376,7 +370,6 @@ def scrape_developersindia():
                     "description": title,
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
     except Exception as e:
         print(f"developersIndia error: {e}")
     return jobs
@@ -418,7 +411,6 @@ def scrape_internshala():
                     "description": f"Internship: {title}",
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
             time.sleep(2)
     except Exception as e:
         print(f"Internshala error: {e}")
@@ -456,7 +448,6 @@ def scrape_remoteok():
                 "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
             }
             jobs.append(job_data)
-            save_scraped_job(**job_data)
     except Exception as e:
         print(f"RemoteOK error: {e}")
     return jobs
@@ -503,7 +494,6 @@ def scrape_himalayas():
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
 
             time.sleep(2)
     except Exception as e:
@@ -550,7 +540,6 @@ def scrape_jobicy():
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
 
             time.sleep(2)
     except Exception as e:
@@ -603,7 +592,6 @@ def scrape_themuse():
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
 
             time.sleep(2)
     except Exception as e:
@@ -660,7 +648,6 @@ def scrape_jooble():
                     "description": BeautifulSoup(desc[:1000], "html.parser").get_text()[:500],
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
 
             time.sleep(2)
     except Exception as e:
@@ -717,7 +704,6 @@ def scrape_simplify_internships():
                 "description": f"Summer 2026 Internship: {title} at {company}",
             }
             jobs.append(job_data)
-            save_scraped_job(**job_data)
     except Exception as e:
         print(f"SimplifyJobs error: {e}")
     return jobs
@@ -846,7 +832,6 @@ def scrape_wellfound_graphql():
                             "description": BeautifulSoup(jl_desc, "html.parser").get_text()[:500],
                         }
                         jobs.append(job_data)
-                        save_scraped_job(**job_data)
 
                 has_next = data.get("data", {}).get("talent", {}).get(
                     "jobSearchResults", {}).get("hasNextPage", False)
@@ -910,7 +895,6 @@ def scrape_unstop():
                     "description": f"Internship: {title} at {company}",
                 }
                 jobs.append(job_data)
-                save_scraped_job(**job_data)
             time.sleep(2)
     except Exception as e:
         print(f"Unstop error: {e}")

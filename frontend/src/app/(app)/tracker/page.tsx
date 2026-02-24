@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   getApplications,
   createApplication,
@@ -61,6 +62,12 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+import {
   ClipboardList,
   Plus,
   ChevronDown,
@@ -68,6 +75,8 @@ import {
   Loader2,
   ExternalLink,
   Pencil,
+  MessageSquare,
+  Mail,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -130,6 +139,8 @@ function StatusBadge({ status }: { status: string }) {
 // ---------------------------------------------------------------------------
 
 export default function TrackerPage() {
+  const router = useRouter();
+
   // ---- Applications state ----
   const [applications, setApplications] = useState<Application[]>([]);
   const [appsLoading, setAppsLoading] = useState(true);
@@ -672,19 +683,109 @@ export default function TrackerPage() {
             {applications.map((app) => (
               <Card key={app.id}>
                 <Collapsible>
-                  <CollapsibleTrigger asChild>
-                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3 pt-3">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <StatusBadge status={app.status} />
-                        <span className="font-bold">{app.company}</span>
-                        <span className="text-muted-foreground">
-                          {app.role}
-                        </span>
-                        <Badge variant="secondary">{app.platform}</Badge>
-                        <ChevronDown className="ml-auto h-4 w-4 text-muted-foreground shrink-0" />
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3 pt-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {/* Inline status dropdown */}
+                      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                        <Select
+                          value={app.status}
+                          onValueChange={async (v) => {
+                            setUpdatingId(app.id);
+                            try {
+                              await updateApplicationStatus(app.id, v);
+                              toast.success(`Status → ${v}`);
+                              await fetchApplications();
+                            } catch {
+                              toast.error("Failed to update status");
+                            } finally {
+                              setUpdatingId(null);
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              "w-[130px] h-7 text-xs font-medium",
+                              STATUS_COLORS[app.status] || "border-border"
+                            )}
+                          >
+                            {updatingId === app.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <SelectValue />
+                            )}
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUSES.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    </CardHeader>
-                  </CollapsibleTrigger>
+
+                      <CollapsibleTrigger asChild>
+                        <div className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer">
+                          <span className="font-bold truncate">{app.company}</span>
+                          <span className="text-muted-foreground truncate">
+                            {app.role}
+                          </span>
+                          <Badge variant="secondary">{app.platform}</Badge>
+                        </div>
+                      </CollapsibleTrigger>
+
+                      {/* Quick action buttons */}
+                      <TooltipProvider delayDuration={300}>
+                        <div className="ml-auto flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => {
+                                  const params = new URLSearchParams({
+                                    company: app.company,
+                                    role: app.role,
+                                    type: "follow-up",
+                                  });
+                                  router.push(`/messages?${params.toString()}`);
+                                }}
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Follow-up</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => {
+                                  const params = new URLSearchParams({
+                                    company: app.company,
+                                    role: app.role,
+                                    type: "cold-dm",
+                                  });
+                                  router.push(`/messages?${params.toString()}`);
+                                }}
+                              >
+                                <Mail className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Cold DM</TooltipContent>
+                          </Tooltip>
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </CollapsibleTrigger>
+                        </div>
+                      </TooltipProvider>
+                    </div>
+                  </CardHeader>
 
                   <CollapsibleContent>
                     <CardContent className="pt-0 space-y-4">
@@ -751,44 +852,6 @@ export default function TrackerPage() {
 
                       {/* Actions row */}
                       <div className="flex items-center gap-3 flex-wrap">
-                        <Select
-                          value={statusUpdates[app.id] || app.status}
-                          onValueChange={(v) =>
-                            setStatusUpdates((prev) => ({
-                              ...prev,
-                              [app.id]: v,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="w-[160px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STATUSES.map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {s}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-
-                        <Button
-                          size="sm"
-                          onClick={() => handleUpdateStatus(app.id)}
-                          disabled={
-                            updatingId === app.id ||
-                            !statusUpdates[app.id] ||
-                            statusUpdates[app.id] === app.status
-                          }
-                        >
-                          {updatingId === app.id ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Pencil className="mr-2 h-4 w-4" />
-                          )}
-                          Update
-                        </Button>
-
                         <Dialog
                           open={
                             deleteDialogOpen &&
