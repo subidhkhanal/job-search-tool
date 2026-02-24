@@ -35,6 +35,7 @@ import {
   TableBody,
   TableCell,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
 import {
   Briefcase,
   Clock,
@@ -43,7 +44,9 @@ import {
   XCircle,
   AlertTriangle,
   TrendingUp,
+  Moon,
 } from "lucide-react";
+import Link from "next/link";
 
 const WEEKLY_TARGET = 50;
 
@@ -147,6 +150,27 @@ export default function DashboardPage() {
           Your job search at a glance — stats, trends, and follow-ups.
         </p>
       </div>
+
+      {/* ---- Empty State CTA ---- */}
+      {stats?.total === 0 && (
+        <Card className="border-dashed border-2">
+          <CardContent className="flex flex-col items-center gap-4 pt-8 pb-8 text-center">
+            <Moon className="h-12 w-12 text-muted-foreground" />
+            <div>
+              <p className="text-lg font-semibold">No applications yet</p>
+              <p className="text-muted-foreground text-sm mt-1">
+                Start by checking tonight&apos;s scraped jobs and logging your first application.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/tonight">
+                <Moon className="mr-2 h-4 w-4" />
+                Go to Tonight&apos;s Plan
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ---- Stat Cards ---- */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">

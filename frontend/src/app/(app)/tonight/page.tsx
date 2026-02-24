@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getScrapedJobs, getFollowUps, createApplication } from "@/lib/api";
 import type { ScrapedJob, FollowUp } from "@/lib/types";
@@ -14,6 +14,13 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Loader2,
@@ -55,6 +62,24 @@ export default function TonightPage() {
   const [jobs, setJobs] = useState<ScrapedJob[]>([]);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loggedJobs, setLoggedJobs] = useState<Set<string>>(new Set());
+  const [sortBy, setSortBy] = useState<"score" | "source" | "company">("score");
+  const [filterMode, setFilterMode] = useState<"all" | "remote" | "hybrid" | "onsite">("all");
+
+  const filteredJobs = useMemo(() => {
+    let filtered = [...jobs];
+    if (filterMode !== "all") {
+      filtered = filtered.filter(
+        (j) => (j.work_mode || "").toLowerCase() === filterMode
+      );
+    }
+    filtered.sort((a, b) => {
+      if (sortBy === "score") return (b.score || 0) - (a.score || 0);
+      if (sortBy === "company") return (a.company || "").localeCompare(b.company || "");
+      if (sortBy === "source") return (a.source || "").localeCompare(b.source || "");
+      return 0;
+    });
+    return filtered;
+  }, [jobs, sortBy, filterMode]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -186,9 +211,41 @@ export default function TonightPage() {
 
           {/* ---- Section 2: Scraped Jobs ---- */}
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight mb-4">
-              Latest Scraped Jobs
-            </h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+              <h2 className="text-2xl font-semibold tracking-tight">
+                Latest Scraped Jobs
+                {jobs.length > 0 && (
+                  <span className="text-muted-foreground text-base font-normal ml-2">
+                    ({filteredJobs.length}{filterMode !== "all" ? ` of ${jobs.length}` : ""})
+                  </span>
+                )}
+              </h2>
+              {jobs.length > 0 && (
+                <div className="flex gap-2">
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+                    <SelectTrigger className="w-[130px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="score">Sort: Score</SelectItem>
+                      <SelectItem value="company">Sort: Company</SelectItem>
+                      <SelectItem value="source">Sort: Source</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={filterMode} onValueChange={(v) => setFilterMode(v as typeof filterMode)}>
+                    <SelectTrigger className="w-[130px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Modes</SelectItem>
+                      <SelectItem value="remote">Remote</SelectItem>
+                      <SelectItem value="hybrid">Hybrid</SelectItem>
+                      <SelectItem value="onsite">Onsite</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
             {jobs.length === 0 ? (
               <p className="text-muted-foreground text-sm">
                 No scraped jobs yet. Jobs are fetched automatically every hour
@@ -196,7 +253,7 @@ export default function TonightPage() {
               </p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {jobs.map((job, idx) => {
+                {filteredJobs.map((job, idx) => {
                   const key = `${job.company}::${job.title}`;
                   const isLogged = loggedJobs.has(key);
 
