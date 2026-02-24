@@ -141,6 +141,16 @@ def delete_application(app_id):
 
 # ===================== SCRAPED JOBS FUNCTIONS =====================
 
+def get_existing_job_urls():
+    """Get all URLs already in scraped_jobs table for deduplication."""
+    try:
+        db = _get_client()
+        resp = db.table("scraped_jobs").select("url").execute()
+        return {row["url"] for row in resp.data} if resp.data else set()
+    except Exception:
+        return set()
+
+
 def save_scraped_job(title, company, location, source, url, description="",
                      score=0, noc_verdict="", skill_match=0):
     db = _get_client()
@@ -454,3 +464,51 @@ def get_demo_results():
         return pd.DataFrame(resp.data)
     except Exception:
         return pd.DataFrame()
+
+
+# ===================== EMAIL LOG FUNCTIONS =====================
+
+def save_email_log(subject, markdown_content, html_content, jobs_count=0,
+                   sources_summary=None, email_sent=False):
+    """Save a sent email log to Supabase so the frontend can display it."""
+    db = _get_client()
+    import json
+    try:
+        db.table("email_logs").insert({
+            "subject": subject,
+            "markdown_content": markdown_content,
+            "html_content": html_content,
+            "jobs_count": jobs_count,
+            "sources_summary": json.dumps(sources_summary or {}),
+            "email_sent": email_sent,
+        }).execute()
+    except Exception as e:
+        print(f"Failed to save email log: {e}")
+
+
+def get_email_logs(limit=20):
+    """Get recent email logs, newest first."""
+    try:
+        db = _get_client()
+        resp = (db.table("email_logs")
+                .select("*")
+                .order("created_at", desc=True)
+                .limit(limit)
+                .execute())
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def get_email_log(log_id):
+    """Get a single email log by ID."""
+    try:
+        db = _get_client()
+        resp = (db.table("email_logs")
+                .select("*")
+                .eq("id", log_id)
+                .single()
+                .execute())
+        return resp.data
+    except Exception:
+        return None

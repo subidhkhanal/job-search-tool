@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     WELLFOUND_SESSION: str = ""
     WELLFOUND_CF: str = ""
     WELLFOUND_DATADOME: str = ""
+    GMAIL_ADDRESS: str = ""
+    GMAIL_APP_PASSWORD: str = ""
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

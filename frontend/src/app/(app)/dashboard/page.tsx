@@ -1,0 +1,396 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  getDashboard,
+  getFollowUps,
+  getWeeklyTrend,
+  getPlatformEffectiveness,
+  getStatusFunnel,
+  getRoleAnalysis,
+} from "@/lib/api";
+import type {
+  DashboardStats,
+  FollowUp,
+  WeeklyTrend,
+  PlatformEffectiveness,
+  StatusFunnel,
+  RoleAnalysis,
+} from "@/lib/types";
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "@/components/ui/table";
+import {
+  Briefcase,
+  Clock,
+  ThumbsUp,
+  Trophy,
+  XCircle,
+  AlertTriangle,
+  TrendingUp,
+} from "lucide-react";
+
+const WEEKLY_TARGET = 50;
+
+export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [followUps, setFollowUps] = useState<FollowUp[]>([]);
+  const [weeklyTrend, setWeeklyTrend] = useState<WeeklyTrend[]>([]);
+  const [platformData, setPlatformData] = useState<PlatformEffectiveness[]>([]);
+  const [statusFunnel, setStatusFunnel] = useState<StatusFunnel | null>(null);
+  const [roleAnalysis, setRoleAnalysis] = useState<RoleAnalysis[]>([]);
+
+  useEffect(() => {
+    async function fetchAll() {
+      try {
+        const [
+          dashboardRes,
+          followUpsRes,
+          weeklyTrendRes,
+          platformRes,
+          statusFunnelRes,
+          roleAnalysisRes,
+        ] = await Promise.all([
+          getDashboard(),
+          getFollowUps(),
+          getWeeklyTrend(),
+          getPlatformEffectiveness(),
+          getStatusFunnel(),
+          getRoleAnalysis(),
+        ]);
+
+        setStats(dashboardRes);
+        setFollowUps(followUpsRes);
+        setWeeklyTrend(weeklyTrendRes);
+        setPlatformData(platformRes);
+        setStatusFunnel(statusFunnelRes);
+        setRoleAnalysis(roleAnalysisRes);
+      } catch (err) {
+        console.error("Failed to load dashboard data", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchAll();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <p className="text-muted-foreground text-lg">Loading...</p>
+      </div>
+    );
+  }
+
+  const statCards = [
+    {
+      label: "Total Applied",
+      value: stats?.total ?? 0,
+      icon: Briefcase,
+      color: "text-blue-400",
+    },
+    {
+      label: "Awaiting Response",
+      value: stats?.applied ?? 0,
+      icon: Clock,
+      color: "text-yellow-400",
+    },
+    {
+      label: "Interviews",
+      value: stats?.interview ?? 0,
+      icon: ThumbsUp,
+      color: "text-emerald-400",
+    },
+    {
+      label: "Offers",
+      value: stats?.offer ?? 0,
+      icon: Trophy,
+      color: "text-purple-400",
+    },
+    {
+      label: "Rejected",
+      value: stats?.rejected ?? 0,
+      icon: XCircle,
+      color: "text-red-400",
+    },
+  ];
+
+  const weeklyProgress = stats?.this_week ?? 0;
+  const weeklyPct = Math.min(
+    Math.round((weeklyProgress / WEEKLY_TARGET) * 100),
+    100
+  );
+
+  return (
+    <div className="space-y-8">
+      {/* ---- Page Header ---- */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">
+          Your job search at a glance — stats, trends, and follow-ups.
+        </p>
+      </div>
+
+      {/* ---- Stat Cards ---- */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+        {statCards.map((s) => (
+          <Card key={s.label}>
+            <CardContent className="flex flex-col items-center gap-2 pt-6 text-center">
+              <s.icon className={`h-6 w-6 ${s.color}`} />
+              <p className="text-muted-foreground text-xs font-medium uppercase tracking-wide">
+                {s.label}
+              </p>
+              <p className="text-3xl font-bold">{s.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* ---- Weekly Progress ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-emerald-400" />
+            Weekly Progress
+          </CardTitle>
+          <CardDescription>
+            {weeklyProgress} / {WEEKLY_TARGET} applications this week
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Progress value={weeklyPct} className="h-3" />
+          <p className="text-muted-foreground text-right text-sm">
+            {weeklyPct}%
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ---- Follow-ups Due ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-400" />
+            Follow-ups Due
+          </CardTitle>
+          <CardDescription>
+            Applications that need a follow-up soon.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {followUps.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No follow-ups due. You&apos;re all caught up!
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {followUps.map((fu) => (
+                <div
+                  key={fu.id}
+                  className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-1"
+                >
+                  <p className="font-semibold">{fu.company}</p>
+                  <p className="text-muted-foreground text-sm">{fu.role}</p>
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-xs text-amber-400">
+                      {fu.follow_up_date}
+                    </span>
+                    <span className="text-muted-foreground text-xs capitalize">
+                      {fu.status}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* ---- Platform Effectiveness ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Platform Effectiveness</CardTitle>
+          <CardDescription>
+            Response rates across different application platforms.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {platformData.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No platform data available yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Platform</TableHead>
+                  <TableHead className="text-right">Applications</TableHead>
+                  <TableHead className="text-right">Responses</TableHead>
+                  <TableHead className="w-[200px]">Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {platformData.map((p) => (
+                  <TableRow key={p.platform}>
+                    <TableCell className="font-medium">{p.platform}</TableCell>
+                    <TableCell className="text-right">
+                      {p.applications}
+                    </TableCell>
+                    <TableCell className="text-right">{p.responses}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Progress
+                          value={p.response_rate}
+                          className="h-2 flex-1"
+                        />
+                        <span className="text-muted-foreground w-12 text-right text-xs">
+                          {p.response_rate.toFixed(1)}%
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ---- Status Funnel ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Status Funnel</CardTitle>
+          <CardDescription>
+            Breakdown of applications by current status.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!statusFunnel || Object.keys(statusFunnel).length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No status data available yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Count</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {Object.entries(statusFunnel).map(([status, count]) => (
+                  <TableRow key={status}>
+                    <TableCell className="font-medium capitalize">
+                      {status}
+                    </TableCell>
+                    <TableCell className="text-right">{count}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ---- Weekly Trend ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Weekly Trend</CardTitle>
+          <CardDescription>
+            Application volume over recent weeks.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {weeklyTrend.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No weekly trend data available yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Week</TableHead>
+                  <TableHead className="text-right">Jobs</TableHead>
+                  <TableHead className="text-right">Internships</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {weeklyTrend.map((w) => (
+                  <TableRow key={w.week}>
+                    <TableCell className="font-medium">{w.week}</TableCell>
+                    <TableCell className="text-right">{w.Job ?? 0}</TableCell>
+                    <TableCell className="text-right">
+                      {w.Internship ?? 0}
+                    </TableCell>
+                    <TableCell className="text-right">{w.total}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ---- Role Analysis ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Role Analysis</CardTitle>
+          <CardDescription>
+            How different role keywords perform in your applications.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {roleAnalysis.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No role analysis data available yet.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Role Keyword</TableHead>
+                  <TableHead className="text-right">Applied</TableHead>
+                  <TableHead className="text-right">Responses</TableHead>
+                  <TableHead className="text-right">Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {roleAnalysis.map((r) => (
+                  <TableRow key={r.role_keyword}>
+                    <TableCell className="font-medium">
+                      {r.role_keyword}
+                    </TableCell>
+                    <TableCell className="text-right">{r.applied}</TableCell>
+                    <TableCell className="text-right">{r.responses}</TableCell>
+                    <TableCell className="text-right">
+                      {r.response_rate.toFixed(1)}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

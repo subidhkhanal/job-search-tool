@@ -1,25 +1,17 @@
 """
-Nightly Job Search Automation
-Runs all scrapers, builds TONIGHT.md battle plan, and sends email.
+Hourly Job Search Automation
+Runs all scrapers, scores/ranks jobs, sends email, and saves to Supabase.
 Designed to run both locally and in GitHub Actions.
 """
 
 import os
 import json
-import random
 from datetime import datetime
 from tracker import (
-    init_db, get_follow_ups_due, get_stats, get_scraped_jobs,
-    get_referral_follow_ups_due, get_referrals_by_company, get_referral_stats,
-    get_active_demos,
+    init_db, save_scraped_job, save_email_log, get_existing_job_urls,
 )
-from scraper import (
-    run_all_scrapers,
-    scrape_wellfound_search_hint,
-    scrape_linkedin_search_urls,
-    generate_career_url,
-)
-from jd_analyzer import quick_ats
+from scraper import run_all_scrapers
+from send_email import build_email_content, send_email, get_alert_number
 
 # Companies to exclude from battle plan (scams, bad reputation, etc.)
 BLOCKED_COMPANIES = {"turing"}
@@ -238,298 +230,12 @@ Respond ONLY in this JSON format:
     return candidates + rest
 
 
-def _render_job_table(jobs_list, max_rows):
-    """Render a markdown table of jobs. Returns list of lines."""
-    lines = []
-    lines.append("| Relevance | Mode | Job Title | Score | ATS | LLM Take | Link | Career Page |")
-    lines.append("|-----------|------|-----------|-------|-----|----------|------|-------------|")
-
-    for idx, j in enumerate(jobs_list[:max_rows], 1):
-        title = j.get("title", "Untitled").replace("|", "/").strip()[:60]
-        url = j.get("url", "")
-        score = j.get("score", 0)
-        relevance = _get_relevance_label(score)
-
-        # Detect work mode
-        text = (j.get("location", "") + " " + j.get("description", "") + " " + j.get("title", "")).lower()
-        if any(kw in text for kw in ["onsite", "on-site", "on site", "in-office", "in office", "work from office", "wfo"]):
-            work_mode = "\U0001f3e2 Onsite"
-        elif "hybrid" in text:
-            work_mode = "\U0001f500 Hybrid"
-        elif "remote" in text:
-            work_mode = "\U0001f3e0 Remote"
-        else:
-            work_mode = "\u2014"
-
-        # ATS score
-        desc = j.get("description", "")
-        ats_score = quick_ats(desc) if desc else 0
-        ats_display = f"{ats_score}%"
-        if len(desc.strip()) < 600:
-            ats_display += "~"
-
-        link = f"[Apply]({url})" if url else "\u2014"
-        llm_reason = j.get("llm_reason", "").replace("|", "\u00b7")[:40] or "\u2014"
-        career_url = generate_career_url(j.get("company", ""), j.get("title", ""))
-        career_link = f"[Career]({career_url})"
-
-        lines.append(
-            f"| {relevance} | {work_mode} | {title} | {score} | {ats_display} | {llm_reason} | {link} | {career_link} |"
-        )
-
-    return lines
-
-
-def build_battle_plan(jobs, sources_status, sources_errors=None):
-    """Build the TONIGHT.md battle plan markdown with phased structure."""
-    today = datetime.now().strftime("%A, %B %d, %Y")
-    now = datetime.now().strftime("%I:%M %p")
-    total_found = len(jobs)
-    sources_errors = sources_errors or {}
-
-    # Score and sort all jobs, filter out non-English and low-relevance
-    for job in jobs:
-        job["score"] = score_job(job)
-    jobs = [j for j in jobs if j["score"] > -100]
-    jobs = [j for j in jobs if j.get("score", 0) >= 20]
-    jobs = [j for j in jobs if j.get("company", "").strip().lower() not in BLOCKED_COMPANIES]
-    jobs.sort(key=lambda j: j["score"], reverse=True)
-
-    # Get stats, follow-ups, referrals, demos
-    stats = {}
-    try:
-        stats = get_stats()
-    except Exception:
-        pass
-
-    follow_ups = []
-    try:
-        fu = get_follow_ups_due()
-        if not fu.empty:
-            follow_ups = fu.to_dict("records")
-    except Exception:
-        pass
-
-    referral_follow_ups = []
-    try:
-        rfu = get_referral_follow_ups_due()
-        if not rfu.empty:
-            referral_follow_ups = rfu.to_dict("records")
-    except Exception:
-        pass
-
-    ref_stats = {}
-    try:
-        ref_stats = get_referral_stats()
-    except Exception:
-        pass
-
-    active_demos = []
-    try:
-        demos_df = get_active_demos()
-        if not demos_df.empty:
-            active_demos = demos_df.to_dict("records")
-    except Exception:
-        pass
-
-    lines = []
-    lines.append(f"# \U0001f3af Tonight's Battle Plan \u2014 {today}")
-    lines.append(f"*Generated at {now}. You start at 10 PM. Go.*")
-    lines.append("")
-
-    # === Stats ===
-    lines.append("## \U0001f4ca Your Numbers")
-    lines.append(f"- Total applications: {stats.get('total', 0)} | Referrals in pipeline: {ref_stats.get('total', 0)}")
-    lines.append(f"- Awaiting response: {stats.get('applied', 0)}")
-    lines.append(f"- Interviews: {stats.get('interviews', 0)} | Offers: {stats.get('offers', 0)}")
-    if active_demos:
-        lines.append(f"- Demos in progress: {len([d for d in active_demos if d.get('status') in ('Idea', 'Building')])}")
-    lines.append("")
-
-    # === Phase 0: Referral Outreach ===
-    lines.append("## \U0001f91d Phase 0: Referral Outreach (9:55 \u2013 10:10 PM)")
-    lines.append("*One referral = 20 cold applications. Do this first.*")
-    lines.append("")
-    if referral_follow_ups:
-        for rfu in referral_follow_ups:
-            lines.append(
-                f"- [ ] Follow up: **{rfu['contact_name']}** ({rfu.get('contact_role', '')}) at "
-                f"{rfu['company']} \u2014 Status: {rfu['status']} \u2014 "
-                f"Last contacted: {rfu.get('last_contacted', 'N/A')}"
-            )
-    else:
-        lines.append("No referral follow-ups due tonight. \u2705")
-
-    # Cross-reference top jobs with referrals
-    if jobs:
-        lines.append("")
-        lines.append("**\U0001f4a1 Contact cross-reference:**")
-        for j in jobs[:10]:
-            company = j.get("company", "")
-            if company:
-                try:
-                    refs = get_referrals_by_company(company)
-                    if not refs.empty:
-                        for _, ref in refs.iterrows():
-                            lines.append(
-                                f"- \U0001f525 **{company}** has a job AND you know "
-                                f"**{ref['contact_name']}** ({ref.get('contact_role', '')}) \u2014 "
-                                f"Send referral request!"
-                            )
-                except Exception:
-                    pass
-    lines.append("")
-
-    # === Scrape Summary with health status ===
-    lines.append("## \U0001f4e1 Scrape Summary")
-    lines.append("")
-    lines.append("| Source | Jobs Found | Status |")
-    lines.append("|--------|-----------|--------|")
-    for source, count in sources_status.items():
-        if source in sources_errors:
-            status = "\u274c FAILED"
-        elif count == 0:
-            status = "\u26a0\ufe0f EMPTY"
-        else:
-            status = "\u2705 OK"
-        lines.append(f"| {source} | {count} | {status} |")
-
-    high_relevance = sum(1 for j in jobs if j.get("score", 0) >= 40)
-    lines.append(f"\n**Total: {total_found}** | **High relevance: {high_relevance}**")
-
-    if sources_errors:
-        lines.append("")
-        lines.append("**Scraper failures:**")
-        for source, err in sources_errors.items():
-            lines.append(f"- {source}: `{err[:80]}`")
-    lines.append("")
-
-    # === Phase 1: Follow-ups ===
-    lines.append("## \u23f0 Phase 1: Follow-ups (10:00 \u2013 10:15 PM)")
-    lines.append("")
-    if follow_ups:
-        for fu in follow_ups:
-            lines.append(
-                f"- [ ] Follow up: **{fu['company']}** \u2014 {fu['role']} "
-                f"({fu.get('platform', '')})"
-            )
-    else:
-        lines.append("No follow-ups due tonight. \u2705")
-    lines.append("")
-
-    # === Phase 2: Top Jobs ===
-    lines.append("## \U0001f50d Phase 2: Apply to Top Jobs (10:15 \u2013 10:50 PM)")
-    lines.append("")
-
-    if jobs:
-        lines.extend(_render_job_table(jobs, max_rows=20))
-        lines.append("")
-    else:
-        lines.append("No relevant jobs found tonight. Try manual links below.")
-        lines.append("")
-
-    # === Phase 3: Manual Platform Applications ===
-    lines.append("## \U0001f4bc Phase 3: Manual Platform Applications (10:50 \u2013 11:20 PM)")
-    lines.append("")
-    lines.append("### Wellfound (5-8 apps)")
-    for url in scrape_wellfound_search_hint():
-        lines.append(f"- [ ] [{url}]({url})")
-    lines.append("")
-    lines.append("### LinkedIn Easy Apply (10-15 apps)")
-    for item in scrape_linkedin_search_urls():
-        lines.append(f"- [ ] [{item['query']}]({item['url']})")
-    lines.append("")
-
-    # === Phase 4: Direct Outreach ===
-    lines.append("## \U0001f3af Phase 4: Direct Outreach (11:20 \u2013 11:45 PM)")
-    lines.append("")
-
-    # Deployed demos ready to send
-    deployed_demos = [d for d in active_demos if d.get("status") == "Deployed" and not d.get("result")]
-    if deployed_demos:
-        lines.append("### \U0001f6e0\ufe0f Demo Ready to Send:")
-        for d in deployed_demos:
-            lines.append(f"**{d['company']}** \u2014 Built: {d['demo_idea']}")
-            if d.get("demo_url"):
-                lines.append(f"Demo: {d['demo_url']}")
-            lines.append("- [ ] Personalize outreach and send to decision maker")
-            lines.append("")
-
-    # Cold DMs
-    if jobs:
-        lines.append("### Cold DMs:")
-        top3 = [j for j in jobs[:5] if j.get("score", 0) >= 30][:3]
-        if top3:
-            for j in top3:
-                lines.append(f"**{j['company']}** \u2014 {j['title']}")
-                lines.append(f"- Find the hiring manager on LinkedIn")
-                lines.append(f"- Use Message Generator to draft a cold DM")
-                lines.append("- [ ] Personalize and send")
-                lines.append("")
-        else:
-            lines.append("No strong-match targets for DMs tonight. Focus on volume.")
-            lines.append("")
-    else:
-        lines.append("No targets for DMs tonight.")
-        lines.append("")
-
-    # === Phase 5: Log & Review ===
-    lines.append("## \U0001f4cb Phase 5: Log & Review (11:45 PM \u2013 12:00 AM)")
-    lines.append("")
-    lines.append("- [ ] Log tonight's applications in tracker")
-    lines.append("- [ ] Update referral statuses")
-    lines.append("- [ ] Total applications tonight: ___ ")
-    lines.append("- [ ] Review tomorrow's follow-up schedule")
-    lines.append("")
-
-    # === LinkedIn Reminder (Mon/Wed/Fri only) ===
-    if datetime.now().weekday() in [0, 2, 4]:  # Mon, Wed, Fri
-        lines.append("## \U0001f4e3 LinkedIn Post Reminder (tomorrow morning \u2014 15 min)")
-        lines.append("")
-        post_ideas = [
-            "Share a build update on your Agentic RAG project",
-            "Explain how hybrid search (dense + BM25) works with a simple diagram",
-            "Write about a bug you fixed this week and what you learned",
-            "Compare LangChain vs LlamaIndex for RAG \u2014 share your test results",
-            "Share how your PathToPR automation reduced manual work from hours to minutes",
-            "Explain reciprocal rank fusion in simple terms",
-            "Share your job search tool \u2014 'I built this to automate my job search'",
-            "Write about how you chose ChromaDB over Pinecone and why",
-            "Explain RAGAS evaluation framework to someone who's never heard of it",
-            "Share 3 things you learned about the Gen AI job market this week",
-            "Write about a mistake you made while building a RAG pipeline",
-            "Compare different embedding models \u2014 which works best for your use case",
-            "Share how you built a query routing system with LangChain",
-            "Write about the difference between semantic search and keyword search",
-            "Post about why you chose FastAPI over Flask for your backend",
-            "Share a 'day in my life' as an M.Tech AI student building projects",
-            "Explain how you use the OpenAI API in your PathToPR automation",
-            "Write about why production AI is different from tutorial AI",
-            "Post about a paper you read this week and your key takeaway",
-            "Share how you evaluate RAG pipeline quality with metrics",
-        ]
-        selected = random.sample(post_ideas, min(5, len(post_ideas)))
-        lines.append("Pick ONE:")
-        for idea in selected:
-            lines.append(f"- \U0001f4dd {idea}")
-        lines.append("")
-        lines.append("**Format:** Hook first line \u2192 line breaks every 2-3 sentences \u2192 end with a question")
-        lines.append("**Tags:** #GenAI #LangChain #RAG #AIJobs #MTechAI #BuildInPublic")
-        lines.append("**Best time:** 8-9 AM IST (day after reminder)")
-        lines.append("")
-
-    lines.append("---")
-    lines.append("*Generated automatically by Job Search Tool*")
-
-    return "\n".join(lines)
-
-
 def main():
-    print("=== Nightly Job Search Automation ===")
+    print("=== Hourly Job Search Automation ===")
     print(f"Running at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
 
-    # Initialize database (creates tables if they don't exist)
+    # Initialize database
     init_db()
 
     # Run all automated scrapers
@@ -541,22 +247,68 @@ def main():
     if sources_errors:
         print(f"\nFailed scrapers: {', '.join(sources_errors.keys())}")
 
-    # LLM re-ranking for top candidates
-    print("\nRunning LLM re-ranking on top candidates...")
-    jobs = llm_rerank_jobs(jobs, top_n=20)
+    # Filter out already-seen jobs (deduplication across hourly runs)
+    print("\nChecking for duplicates...")
+    existing_urls = get_existing_job_urls()
+    new_jobs = [j for j in jobs if j.get("url", "") not in existing_urls]
+    print(f"New jobs: {len(new_jobs)} (filtered out {len(jobs) - len(new_jobs)} duplicates)")
 
-    # Build battle plan
-    print("\nBuilding TONIGHT.md...")
-    battle_plan = build_battle_plan(
-        jobs, sources_status,
-        sources_errors=sources_errors,
+    # Score and filter new jobs
+    for job in new_jobs:
+        job["score"] = score_job(job)
+    new_jobs = [j for j in new_jobs if j["score"] > -100]
+    new_jobs = [j for j in new_jobs if j.get("score", 0) >= 20]
+    new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in BLOCKED_COMPANIES]
+    new_jobs.sort(key=lambda j: j["score"], reverse=True)
+
+    # LLM re-ranking for top candidates
+    if new_jobs:
+        print("\nRunning LLM re-ranking on top candidates...")
+        new_jobs = llm_rerank_jobs(new_jobs, top_n=20)
+
+    # Save new jobs to database
+    print("\nSaving new jobs to database...")
+    for job in new_jobs:
+        try:
+            save_scraped_job(
+                title=job.get("title", ""),
+                company=job.get("company", ""),
+                location=job.get("location", ""),
+                source=job.get("source", ""),
+                url=job.get("url", ""),
+                description=job.get("description", ""),
+                score=job.get("score", 0),
+            )
+        except Exception:
+            pass
+
+    # Only send email if there are new jobs
+    if not new_jobs:
+        print("\nNo new jobs found this run. Skipping email.")
+        print("Done!")
+        return
+
+    # Build email content with only new jobs
+    print("\nBuilding email content...")
+    alert_number = get_alert_number()
+    md_content = build_email_content(new_jobs, sources_status, sources_errors)
+
+    # Send email
+    print(f"Sending Job Alert #{alert_number}...")
+    email_sent = send_email(md_content, alert_number=alert_number)
+
+    # Save to Supabase so frontend can display it
+    print("Saving email log to database...")
+    save_email_log(
+        subject=f"Job Alert #{alert_number}",
+        markdown_content=md_content,
+        html_content="",
+        jobs_count=len(new_jobs),
+        sources_summary=sources_status,
+        email_sent=email_sent,
     )
 
-    with open("TONIGHT.md", "w", encoding="utf-8") as f:
-        f.write(battle_plan)
-    print("TONIGHT.md written.")
-
-    print("\nDone! View the plan on the Streamlit page or check TONIGHT.md.")
+    print(f"\nDone! Job Alert #{alert_number} sent: {email_sent}. {len(new_jobs)} new jobs.")
 
 
 if __name__ == "__main__":

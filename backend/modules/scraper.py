@@ -62,23 +62,18 @@ REMOTE_KEYWORDS = ["remote", "work from home", "wfh", "anywhere",
 
 INDIA_KEYWORDS = ["india", "noida", "delhi", "bangalore", "bengaluru",
                   "hyderabad", "mumbai", "pune", "chennai", "gurgaon",
-                  "gurugram", "remote"]
+                  "gurugram"]
 
-# Allowed locations: remote/worldwide, India, or Nepal
+# Allowed locations: India only
 ALLOWED_LOCATION_KEYWORDS = [
-    "remote", "worldwide", "anywhere", "global", "distributed",
-    "work from home", "wfh", "fully remote",
-    # India
     "india", "noida", "delhi", "bangalore", "bengaluru", "hyderabad",
     "mumbai", "pune", "chennai", "gurgaon", "gurugram", "kolkata",
     "jaipur", "ahmedabad", "lucknow",
-    # Nepal
-    "nepal", "kathmandu", "pokhara", "lalitpur", "biratnagar",
 ]
 
 
 def is_allowed_location(text):
-    """Check if job is remote/worldwide or located in India/Nepal."""
+    """Check if job explicitly mentions India or an Indian city."""
     text_lower = text.lower()
     return any(kw in text_lower for kw in ALLOWED_LOCATION_KEYWORDS)
 
@@ -109,10 +104,10 @@ def is_internship(text):
 
 
 def is_global_or_india(location_text):
-    """For remote-first boards where location = geo-restriction, not remote status.
-    Accept if no geo restriction (empty) or India/Nepal/worldwide allowed."""
+    """Check if location explicitly mentions India or an Indian city.
+    Empty location is rejected (can't confirm it's India)."""
     if not location_text or not location_text.strip():
-        return True  # empty = no restriction = worldwide
+        return False
     text_lower = location_text.lower()
     return any(kw in text_lower for kw in ALLOWED_LOCATION_KEYWORDS)
 
@@ -284,7 +279,7 @@ def scrape_jobspy():
                 search_term=query,
                 location="India",
                 results_wanted=10,
-                hours_old=72,
+                hours_old=24,
                 country_indeed="India",
             )
 

@@ -26,7 +26,7 @@ from .routers import (
 
 # Inject env vars from settings so modules read them via os.environ
 settings = get_settings()
-for key in ("SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "JOOBLE_API_KEY"):
+for key in ("SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "JOOBLE_API_KEY", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"):
     val = getattr(settings, key, "")
     if val:
         os.environ[key] = val
@@ -35,7 +35,7 @@ app = FastAPI(title="Job Search HQ API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
