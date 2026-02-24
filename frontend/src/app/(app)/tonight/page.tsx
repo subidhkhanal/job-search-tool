@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getScrapedJobs, getFollowUps, createApplication } from "@/lib/api";
+import { getScrapedJobs, getFollowUps, createApplication, markScrapedJob } from "@/lib/api";
 import type { ScrapedJob, FollowUp } from "@/lib/types";
 
 import {
@@ -33,6 +33,7 @@ import {
   FileSearch,
   MessageSquare,
   RefreshCw,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -111,10 +112,23 @@ export default function TonightPage() {
         platform: job.source,
         url: job.url,
       });
+      if (job.id) await markScrapedJob(job.id, "applied");
       setLoggedJobs((prev) => new Set(prev).add(key));
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
       toast.success(`Logged ${job.company} - ${job.title} to tracker`);
     } catch {
       toast.error("Failed to log application");
+    }
+  }, []);
+
+  // ------- Dismiss handler -------
+  const handleDismiss = useCallback(async (job: ScrapedJob) => {
+    try {
+      if (job.id) await markScrapedJob(job.id, "dismissed");
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+      toast.success(`Dismissed ${job.company} - ${job.title}`);
+    } catch {
+      toast.error("Failed to dismiss job");
     }
   }, []);
 
@@ -407,6 +421,15 @@ export default function TonightPage() {
                               <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
                             )}
                             {isLogged ? "Logged" : "Log"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-red-400"
+                            onClick={() => handleDismiss(job)}
+                          >
+                            <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                            Dismiss
                           </Button>
                         </div>
                       </CardContent>

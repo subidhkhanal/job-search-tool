@@ -119,12 +119,9 @@ def scrape_remotive():
             desc = job.get("description", "")
             combined = title + " " + desc[:500]
 
-            if not (matches_keywords(title) or matches_keywords(desc[:500])):
-                continue
-            # Remotive is already remote-only; filter for internships
             if not is_internship(combined):
                 continue
-            # Must allow India/Nepal/worldwide
+            # Must allow India/worldwide
             location_text = combined + " " + job.get("candidate_required_location", "")
             if not is_allowed_location(location_text):
                 continue
@@ -164,8 +161,8 @@ def scrape_hn_who_is_hiring():
 
             text_clean = BeautifulSoup(text, "html.parser").get_text()
 
-            # Check if it matches AI/ML keywords + remote + internship + allowed location
-            if not (matches_keywords(text_clean) and is_remote(text_clean) and is_internship(text_clean)):
+            # Check if it matches remote + internship + allowed location
+            if not (is_remote(text_clean) and is_internship(text_clean)):
                 continue
             if not is_allowed_location(text_clean):
                 continue
@@ -224,11 +221,10 @@ def scrape_arbeitnow():
             location = job.get("location", "")
 
             combined = title + " " + desc[:500] + " " + location
-            is_relevant = matches_keywords(title) or matches_keywords(desc[:500])
             is_remote_job = job.get("remote", False) or is_remote(combined)
             is_intern = is_internship(combined)
 
-            if is_relevant and is_remote_job and is_intern and is_allowed_location(combined):
+            if is_remote_job and is_intern and is_allowed_location(combined):
                 job_data = {
                     "title": title,
                     "company": job.get("company_name", "Unknown"),
@@ -290,8 +286,6 @@ def scrape_jobspy():
                 location = str(row.get("location", ""))
                 combined = title + " " + desc[:500] + " " + location
 
-                if not matches_keywords(title) and not matches_keywords(desc[:500]):
-                    continue
                 if not is_internship(combined) or not is_remote(combined):
                     continue
                 if not is_allowed_location(combined):
@@ -341,7 +335,7 @@ def scrape_hasjob():
                 link = f"https://hasjob.co{link}"
 
             combined = title + " " + location
-            if matches_keywords(title) and is_internship(combined) and is_allowed_location(combined):
+            if is_internship(combined) and is_allowed_location(combined):
                 job_data = {
                     "title": title[:150],
                     "company": company[:80],
@@ -372,7 +366,7 @@ def scrape_developersindia():
             if not href.startswith("http"):
                 href = f"https://developersindia.in{href}"
 
-            if title and matches_keywords(title) and is_internship(title):
+            if title and is_internship(title):
                 job_data = {
                     "title": title[:150],
                     "company": "via developersIndia",
@@ -447,8 +441,6 @@ def scrape_remoteok():
             location = job.get("location", "")
             combined = title + " " + desc[:500] + " " + tags
 
-            if not (matches_keywords(title) or matches_keywords(tags) or matches_keywords(desc[:500])):
-                continue
             if not is_internship(combined):
                 continue
             # RemoteOK is all-remote; location = geo-restriction
@@ -496,8 +488,6 @@ def scrape_himalayas():
                 if not is_entry:
                     if not is_internship(combined):
                         continue
-                if not (matches_keywords(title) or matches_keywords(desc[:500]) or matches_keywords(categories)):
-                    continue
                 # Himalayas is remote-first; locationRestrictions = geo-restriction
                 if not is_global_or_india(location):
                     continue
@@ -547,8 +537,6 @@ def scrape_jobicy():
                 if not is_intern_type and not is_entry_level:
                     if not is_internship(combined):
                         continue
-                if not (matches_keywords(title) or matches_keywords(desc[:500])):
-                    continue
                 # Jobicy is all-remote; jobGeo = geo-restriction
                 if not is_global_or_india(location):
                     continue
@@ -600,7 +588,7 @@ def scrape_themuse():
                 location = ", ".join(locations[:3]) if locations else "Flexible / Remote"
                 combined = title + " " + desc[:500] + " " + location
 
-                if not (matches_keywords(title) or matches_keywords(desc[:500])):
+                if not is_allowed_location(combined):
                     continue
 
                 refs = job.get("refs", {}) or {}
@@ -656,8 +644,6 @@ def scrape_jooble():
                 loc = job.get("location", "Remote")
                 combined = title + " " + desc[:500] + " " + loc
 
-                if not (matches_keywords(title) or matches_keywords(desc[:500])):
-                    continue
                 if not is_internship(combined):
                     continue
                 if not is_remote(combined):
@@ -714,10 +700,7 @@ def scrape_simplify_internships():
             apply_url = link_match.group(1) if link_match else ""
 
             combined = title + " " + company + " " + location
-            # All entries are internships — only filter by AI/ML keywords
-            if not matches_keywords(combined):
-                continue
-            # Accept remote or India-based internships
+            # All entries are internships — filter by remote or India location
             location_lower = location.lower()
             is_remote_job = any(kw in location_lower for kw in ["remote", "anywhere", "worldwide", "flexible"])
             is_india_job = any(kw in location_lower for kw in ["india", "bangalore", "bengaluru", "hyderabad",
@@ -847,8 +830,6 @@ def scrape_wellfound_graphql():
                             location = "Unknown"
 
                         combined = jl_title + " " + jl_desc[:300] + " " + location
-                        if not (matches_keywords(jl_title) or matches_keywords(jl_desc[:300])):
-                            continue
                         if not is_remote(combined):
                             continue
                         if not is_allowed_location(combined):
@@ -915,7 +896,9 @@ def scrape_unstop():
                 url = f"https://unstop.com/internships/{slug}" if slug and not slug.startswith("http") else (slug or "")
 
                 combined = title + " " + company + " " + str(location)
-                if not (matches_keywords(title) or matches_keywords(combined)):
+                if not is_internship(combined):
+                    continue
+                if not is_allowed_location(combined):
                     continue
 
                 job_data = {

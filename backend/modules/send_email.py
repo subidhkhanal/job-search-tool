@@ -32,22 +32,23 @@ def _build_html(md_content: str) -> str:
   body {{
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     max-width: 800px; margin: 0 auto; padding: 20px;
-    background: #0f172a; color: #e2e8f0;
+    background: #ffffff; color: #1a1a1a;
   }}
   table {{
     border-collapse: collapse; width: 100%; margin: 12px 0;
     font-size: 13px;
   }}
   th {{
-    background: #1e293b; color: #38bdf8; padding: 8px 10px;
-    text-align: left; border: 1px solid #334155;
+    background: #f1f5f9; color: #1e293b; padding: 8px 10px;
+    text-align: left; border: 1px solid #e2e8f0;
+    font-weight: 600;
   }}
   td {{
-    padding: 6px 10px; border: 1px solid #334155;
-    background: #1e293b;
+    padding: 6px 10px; border: 1px solid #e2e8f0;
+    background: #ffffff;
   }}
-  tr:nth-child(even) td {{ background: #0f172a; }}
-  a {{ color: #38bdf8; text-decoration: none; }}
+  tr:nth-child(even) td {{ background: #f8fafc; }}
+  a {{ color: #2563eb; text-decoration: none; }}
   a:hover {{ text-decoration: underline; }}
 </style>
 </head>
@@ -95,7 +96,7 @@ def build_email_content(jobs, sources_status, sources_errors=None):
         lines.append("| # | Title | Company | Location | Score | Verdict | Link |")
         lines.append("|---|-------|---------|----------|-------|---------|------|")
 
-        for idx, j in enumerate(jobs[:40], 1):
+        for idx, j in enumerate(jobs, 1):
             title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
             company = j.get("company", "-").replace("|", "/").strip()[:25]
             location = j.get("location", "-").replace("|", "/").strip()[:20]

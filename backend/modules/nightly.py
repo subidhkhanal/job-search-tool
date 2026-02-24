@@ -272,7 +272,6 @@ def main():
     for job in new_jobs:
         job["score"] = score_job(job)
     new_jobs = [j for j in new_jobs if j["score"] > -100]
-    new_jobs = [j for j in new_jobs if j.get("score", 0) >= 20]
     new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
     new_jobs.sort(key=lambda j: j["score"], reverse=True)
 
@@ -334,14 +333,17 @@ def main():
 
     # Save to Supabase so frontend can display it
     print("Saving email log to database...")
-    save_email_log(
-        subject=f"Job Alert #{alert_number}",
-        markdown_content=md_content,
-        html_content="",
-        jobs_count=len(new_jobs),
-        sources_summary=sources_status,
-        email_sent=email_sent,
-    )
+    try:
+        save_email_log(
+            subject=f"Job Alert #{alert_number}",
+            markdown_content=md_content,
+            html_content="",
+            jobs_count=len(new_jobs),
+            sources_summary=sources_status,
+            email_sent=email_sent,
+        )
+    except Exception as e:
+        print(f"  WARNING: Could not save email log to database: {e}")
 
     print(f"\nDone! Job Alert #{alert_number} sent: {email_sent}. {len(new_jobs)} new jobs.")
 
