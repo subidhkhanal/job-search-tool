@@ -24,11 +24,12 @@ import type {
   ResumeTailorResult,
   RoleAnalysis,
   ScrapedJob,
-  SSEEvent,
   StatusFunnel,
   ThankYouRequest,
   TokenResponse,
   UpdateDemoRequest,
+  UserProfile,
+  UserProfileUpdate,
   WeeklyTrend,
 } from "./types";
 
@@ -130,47 +131,7 @@ export async function getRoleAnalysis(): Promise<RoleAnalysis[]> {
   return apiFetch<RoleAnalysis[]>("/api/stats/role-analysis");
 }
 
-// ---- Scraper (SSE) ----
-export function runScraper(onEvent: (event: SSEEvent) => void): AbortController {
-  const controller = new AbortController();
-  const token = getToken();
-
-  fetch(`${API_URL}/api/scraped-jobs/run`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    signal: controller.signal,
-  }).then(async (res) => {
-    if (!res.ok || !res.body) return;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        const dataLine = line.replace(/^data: /, "").trim();
-        if (!dataLine) continue;
-        try {
-          const parsed: SSEEvent = JSON.parse(dataLine);
-          onEvent(parsed);
-        } catch {
-          // skip malformed
-        }
-      }
-    }
-  });
-
-  return controller;
-}
-
+// ---- Scraper ----
 export async function getScrapedJobs(source?: string): Promise<ScrapedJob[]> {
   const qs = source ? `?source=${encodeURIComponent(source)}` : "";
   return apiFetch<ScrapedJob[]>(`/api/scraped-jobs${qs}`);
@@ -300,6 +261,18 @@ export async function createDemo(data: AddDemoRequest) {
 export async function updateDemo(id: number, data: UpdateDemoRequest) {
   return apiFetch<{ success: boolean }>(`/api/demos/${id}`, {
     method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ---- Profile ----
+export async function getProfile(): Promise<UserProfile> {
+  return apiFetch<UserProfile>("/api/profile/");
+}
+
+export async function updateProfile(data: UserProfileUpdate): Promise<UserProfile> {
+  return apiFetch<UserProfile>("/api/profile/", {
+    method: "PUT",
     body: JSON.stringify(data),
   });
 }

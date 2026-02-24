@@ -244,6 +244,18 @@ def _get_default_resume_text():
     global _DEFAULT_RESUME_TEXT_CACHE
     if _DEFAULT_RESUME_TEXT_CACHE is not None:
         return _DEFAULT_RESUME_TEXT_CACHE
+
+    # Try dynamic profile first
+    try:
+        from profile import get_resume_text
+        dynamic = get_resume_text()
+        if dynamic:
+            _DEFAULT_RESUME_TEXT_CACHE = dynamic
+            return _DEFAULT_RESUME_TEXT_CACHE
+    except Exception:
+        pass
+
+    # Fall back to hardcoded data
     from resume_tailor import RESUME_SKILLS, PROJECTS
     from message_generator import SUBIDH_PROFILE
     project_lines = []
@@ -573,15 +585,3 @@ def full_analyze(title, description):
     }
 
 
-def quick_analyze(title, description):
-    """Quick one-line verdict for use in nightly.py battle plan."""
-    result = full_analyze(title, description)
-    noc = result["noc"]
-    skills = result["skills"]
-    ats = quick_ats(description)
-
-    noc_str = f"NOC {noc['code']}" if noc["code"] else "NOC ?"
-    match_str = f"{skills['match_percentage']}% match"
-    ats_str = f"ATS: {ats}%"
-
-    return f"{result['verdict_label']} | {noc_str} | {match_str} | {ats_str}"

@@ -14,6 +14,7 @@ import {
   ClipboardList,
   Users,
   ExternalLink,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { href: "/tracker", label: "Tracker", icon: ClipboardList },
   { href: "/referrals", label: "Referrals", icon: Users },
   { href: "/links", label: "Quick Links", icon: ExternalLink },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {

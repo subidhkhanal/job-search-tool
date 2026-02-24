@@ -17,6 +17,7 @@ from .routers import (
     jd_analyzer,
     messages,
     mini_demos,
+    profile,
     referrals,
     resume_tailor,
     scraper,
@@ -35,7 +36,7 @@ app = FastAPI(title="Job Search HQ API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=settings.get_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -52,6 +53,7 @@ app.include_router(resume_tailor.router, prefix="/api/resume-tailor", tags=["Res
 app.include_router(company_research.router, prefix="/api/company-research", tags=["Company Research"])
 app.include_router(referrals.router, prefix="/api/referrals", tags=["Referrals"])
 app.include_router(mini_demos.router, prefix="/api/demos", tags=["Mini Demos"])
+app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
 
 
 @app.get("/api/health")

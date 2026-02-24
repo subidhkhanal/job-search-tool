@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   generateColdDM,
   generateFollowUp,
@@ -49,12 +50,27 @@ const MESSAGE_TYPE_OPTIONS: { value: MessageType; label: string }[] = [
   { value: "demo-outreach", label: "Demo Outreach" },
 ];
 
-export default function MessagesPage() {
+function MessagesPageInner() {
+  const searchParams = useSearchParams();
   const [messageType, setMessageType] = useState<MessageType | "">("");
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Pre-fill from query params (e.g. from Tonight's Plan)
+  useEffect(() => {
+    const type = searchParams.get("type") as MessageType | null;
+    const company = searchParams.get("company");
+    const role = searchParams.get("role");
+    const days = searchParams.get("days");
+    if (type) setMessageType(type);
+    const prefill: Record<string, string> = {};
+    if (company) prefill.company = company;
+    if (role) prefill.role = role;
+    if (days) prefill.days = days;
+    if (Object.keys(prefill).length > 0) setFormData(prefill);
+  }, [searchParams]);
 
   function handleTypeChange(value: string) {
     setMessageType(value as MessageType);
@@ -548,5 +564,13 @@ export default function MessagesPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function MessagesPage() {
+  return (
+    <Suspense>
+      <MessagesPageInner />
+    </Suspense>
   );
 }

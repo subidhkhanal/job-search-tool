@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { runScraper, getFollowUps, createApplication } from "@/lib/api";
-import type { SSEEvent, ScrapedJob, FollowUp } from "@/lib/types";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getScrapedJobs, getFollowUps, createApplication } from "@/lib/api";
+import type { ScrapedJob, FollowUp } from "@/lib/types";
 
 import {
   Card,
@@ -15,7 +16,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
-  Play,
   Loader2,
   ExternalLink,
   ClipboardPlus,
@@ -23,32 +23,12 @@ import {
   MapPin,
   AlertTriangle,
   Check,
+  FileSearch,
+  MessageSquare,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Pipeline phases in display order
-// ---------------------------------------------------------------------------
-const PHASES = [
-  "started",
-  "scrape_complete",
-  "scoring",
-  "scoring_complete",
-  "reranking",
-  "complete",
-] as const;
-
-type Phase = (typeof PHASES)[number];
-
-const PHASE_LABELS: Record<Phase, string> = {
-  started: "Starting",
-  scrape_complete: "Scraping",
-  scoring: "Scoring Jobs",
-  scoring_complete: "Scoring Complete",
-  reranking: "Re-ranking",
-  complete: "Complete",
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -70,111 +50,31 @@ function workModeBadgeColor(mode: string | undefined) {
 // Page Component
 // ---------------------------------------------------------------------------
 export default function TonightPage() {
-  const [running, setRunning] = useState(false);
-  const [currentPhase, setCurrentPhase] = useState<Phase | null>(null);
-  const [completedPhases, setCompletedPhases] = useState<Set<Phase>>(new Set());
-  const [events, setEvents] = useState<SSEEvent[]>([]);
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<ScrapedJob[]>([]);
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [loggedJobs, setLoggedJobs] = useState<Set<string>>(new Set());
-  const [sourcesStatus, setSourcesStatus] = useState<Record<string, number>>({});
-  const [sourcesErrors, setSourcesErrors] = useState<Record<string, string>>({});
 
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Cleanup abort controller on unmount
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
-
-  // ------- SSE event handler -------
-  const handleEvent = useCallback((evt: SSEEvent) => {
-    setEvents((prev) => [...prev, evt]);
-
-    const phase = evt.event as Phase;
-
-    switch (phase) {
-      case "started":
-        setCurrentPhase("started");
-        setCompletedPhases((prev) => new Set(prev).add("started"));
-        break;
-
-      case "scrape_complete":
-        setCurrentPhase("scrape_complete");
-        setCompletedPhases((prev) => {
-          const next = new Set(prev);
-          next.add("started");
-          next.add("scrape_complete");
-          return next;
-        });
-        if (evt.sources_status) setSourcesStatus(evt.sources_status);
-        if (evt.sources_errors) setSourcesErrors(evt.sources_errors);
-        break;
-
-      case "scoring":
-        setCurrentPhase("scoring");
-        setCompletedPhases((prev) => {
-          const next = new Set(prev);
-          next.add("started");
-          next.add("scrape_complete");
-          return next;
-        });
-        break;
-
-      case "scoring_complete":
-        setCurrentPhase("scoring_complete");
-        setCompletedPhases((prev) => {
-          const next = new Set(prev);
-          next.add("started");
-          next.add("scrape_complete");
-          next.add("scoring");
-          next.add("scoring_complete");
-          return next;
-        });
-        break;
-
-      case "reranking":
-        setCurrentPhase("reranking");
-        setCompletedPhases((prev) => {
-          const next = new Set(prev);
-          next.add("started");
-          next.add("scrape_complete");
-          next.add("scoring");
-          next.add("scoring_complete");
-          return next;
-        });
-        break;
-
-      case "complete":
-        setCurrentPhase("complete");
-        setCompletedPhases(new Set(PHASES));
-        if (evt.jobs) setJobs(evt.jobs);
-        setRunning(false);
-        break;
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [jobsData, followUpsData] = await Promise.all([
+        getScrapedJobs(),
+        getFollowUps(),
+      ]);
+      setJobs(jobsData);
+      setFollowUps(followUpsData);
+    } catch {
+      toast.error("Failed to load data");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
-  // ------- Generate handler -------
-  const handleGenerate = useCallback(async () => {
-    setRunning(true);
-    setEvents([]);
-    setJobs([]);
-    setCurrentPhase(null);
-    setCompletedPhases(new Set());
-    setSourcesStatus({});
-    setSourcesErrors({});
-    setLoggedJobs(new Set());
-
-    // Fetch follow-ups in parallel
-    getFollowUps()
-      .then(setFollowUps)
-      .catch(() => setFollowUps([]));
-
-    const controller = runScraper(handleEvent);
-    abortRef.current = controller;
-  }, [handleEvent]);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // ------- Log to tracker handler -------
   const handleLog = useCallback(async (job: ScrapedJob) => {
@@ -193,38 +93,6 @@ export default function TonightPage() {
     }
   }, []);
 
-  // ------- Phase badge rendering -------
-  const renderPhaseBadge = (phase: Phase) => {
-    const isCompleted = completedPhases.has(phase);
-    const isCurrent = currentPhase === phase && !isCompleted;
-
-    if (isCompleted) {
-      return (
-        <Badge className="bg-emerald-600 text-white">
-          <Check className="mr-1 h-3 w-3" />
-          {PHASE_LABELS[phase]}
-        </Badge>
-      );
-    }
-
-    if (isCurrent) {
-      return (
-        <Badge className="animate-pulse bg-yellow-500 text-black">
-          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-          {PHASE_LABELS[phase]}
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge variant="outline" className="text-muted-foreground">
-        {PHASE_LABELS[phase]}
-      </Badge>
-    );
-  };
-
-  const isComplete = currentPhase === "complete";
-
   return (
     <div className="space-y-8">
       {/* ---- Page Header ---- */}
@@ -234,43 +102,27 @@ export default function TonightPage() {
             Tonight&apos;s Plan
           </h1>
           <p className="text-muted-foreground mt-1">
-            Run scrapers, score jobs, and build your application list for
-            tonight.
+            Latest scraped jobs and follow-ups for your application list.
           </p>
         </div>
-        <Button onClick={handleGenerate} disabled={running}>
-          {running ? (
+        <Button variant="outline" onClick={loadData} disabled={loading}>
+          {loading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
-            <Play className="mr-2 h-4 w-4" />
+            <RefreshCw className="mr-2 h-4 w-4" />
           )}
-          Generate Tonight&apos;s Plan
+          Refresh
         </Button>
       </div>
 
-      {/* ---- Progress Section ---- */}
-      {(running || isComplete) && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Pipeline Progress</CardTitle>
-            <CardDescription>
-              {running
-                ? "Scraping and scoring jobs..."
-                : `Done -- ${jobs.length} jobs found.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {PHASES.map((phase) => (
-                <span key={phase}>{renderPhaseBadge(phase)}</span>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {/* ---- Loading State ---- */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       )}
 
-      {/* ---- Results (shown after complete) ---- */}
-      {isComplete && (
+      {!loading && (
         <>
           {/* ---- Section 1: Follow-ups Due ---- */}
           <Card>
@@ -293,7 +145,7 @@ export default function TonightPage() {
                   {followUps.map((fu) => (
                     <div
                       key={fu.id}
-                      className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-1"
+                      className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-2"
                     >
                       <p className="font-semibold">{fu.company}</p>
                       <p className="text-muted-foreground text-sm">
@@ -307,6 +159,22 @@ export default function TonightPage() {
                           {fu.status}
                         </span>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full mt-1"
+                        onClick={() => {
+                          const params = new URLSearchParams({
+                            company: fu.company,
+                            role: fu.role,
+                            type: "follow-up",
+                          });
+                          router.push(`/messages?${params.toString()}`);
+                        }}
+                      >
+                        <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                        Write Follow-up
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -316,14 +184,15 @@ export default function TonightPage() {
 
           <Separator />
 
-          {/* ---- Section 2: Top Jobs ---- */}
+          {/* ---- Section 2: Scraped Jobs ---- */}
           <div>
             <h2 className="text-2xl font-semibold tracking-tight mb-4">
-              Top Jobs
+              Latest Scraped Jobs
             </h2>
             {jobs.length === 0 ? (
               <p className="text-muted-foreground text-sm">
-                No jobs were returned by the scrapers.
+                No scraped jobs yet. Jobs are fetched automatically every hour
+                via GitHub Actions.
               </p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -344,14 +213,16 @@ export default function TonightPage() {
                               {job.company}
                             </div>
                           </div>
-                          <Badge
-                            className={cn(
-                              "shrink-0 tabular-nums",
-                              scoreBadgeColor(job.score)
-                            )}
-                          >
-                            {job.score}
-                          </Badge>
+                          {job.score > 0 && (
+                            <Badge
+                              className={cn(
+                                "shrink-0 tabular-nums",
+                                scoreBadgeColor(job.score)
+                              )}
+                            >
+                              {job.score}
+                            </Badge>
+                          )}
                         </div>
                       </CardHeader>
 
@@ -366,6 +237,35 @@ export default function TonightPage() {
 
                         {/* Badges row */}
                         <div className="flex flex-wrap gap-1.5">
+                          {job.verdict && (
+                            <Badge
+                              className={cn(
+                                "text-xs",
+                                job.verdict.toUpperCase().includes("APPLY") && !job.verdict.toUpperCase().includes("CAUTION")
+                                  ? "bg-emerald-600/15 text-emerald-400 border-emerald-600/30"
+                                  : job.verdict.toUpperCase().includes("CAUTION")
+                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                                    : "bg-red-500/15 text-red-400 border-red-500/30"
+                              )}
+                            >
+                              {job.verdict}
+                            </Badge>
+                          )}
+                          {typeof job.ats_score === "number" && job.ats_score > 0 && (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-xs",
+                                job.ats_score >= 75
+                                  ? "text-emerald-400 border-emerald-600/30"
+                                  : job.ats_score >= 50
+                                    ? "text-yellow-400 border-yellow-500/30"
+                                    : "text-red-400 border-red-500/30"
+                              )}
+                            >
+                              ATS {job.ats_score}%
+                            </Badge>
+                          )}
                           {job.work_mode && (
                             <Badge
                               variant="outline"
@@ -393,7 +293,7 @@ export default function TonightPage() {
                         <div className="flex-1" />
 
                         {/* Action buttons */}
-                        <div className="flex items-center gap-2 pt-2">
+                        <div className="flex flex-wrap items-center gap-2 pt-2">
                           <Button
                             variant="outline"
                             size="sm"
@@ -411,6 +311,36 @@ export default function TonightPage() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => {
+                              const params = new URLSearchParams({
+                                title: job.title,
+                                company: job.company,
+                                description: (job.description || "").slice(0, 2000),
+                              });
+                              router.push(`/analyzer?${params.toString()}`);
+                            }}
+                          >
+                            <FileSearch className="mr-1.5 h-3.5 w-3.5" />
+                            Analyze
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const params = new URLSearchParams({
+                                company: job.company,
+                                role: job.title,
+                                type: "cold-dm",
+                              });
+                              router.push(`/messages?${params.toString()}`);
+                            }}
+                          >
+                            <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                            Message
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             disabled={isLogged}
                             onClick={() => handleLog(job)}
                           >
@@ -419,7 +349,7 @@ export default function TonightPage() {
                             ) : (
                               <ClipboardPlus className="mr-1.5 h-3.5 w-3.5" />
                             )}
-                            {isLogged ? "Logged" : "Log to Tracker"}
+                            {isLogged ? "Logged" : "Log"}
                           </Button>
                         </div>
                       </CardContent>
@@ -429,60 +359,6 @@ export default function TonightPage() {
               </div>
             )}
           </div>
-
-          <Separator />
-
-          {/* ---- Section 3: Scrape Summary ---- */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Scrape Summary</CardTitle>
-              <CardDescription>
-                Source breakdown from the latest scrape run.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Sources status */}
-              {Object.keys(sourcesStatus).length > 0 && (
-                <div>
-                  <p className="text-sm font-medium mb-2">Jobs per source</p>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(sourcesStatus).map(([source, count]) => (
-                      <Badge key={source} variant="secondary">
-                        {source}: {count}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Errors */}
-              {Object.keys(sourcesErrors).length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-red-400 mb-2">
-                    Errors
-                  </p>
-                  <div className="space-y-1">
-                    {Object.entries(sourcesErrors).map(([source, error]) => (
-                      <div
-                        key={source}
-                        className="rounded-md border border-red-500/30 bg-red-500/5 px-3 py-2 text-sm"
-                      >
-                        <span className="font-medium">{source}:</span>{" "}
-                        <span className="text-muted-foreground">{error}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {Object.keys(sourcesStatus).length === 0 &&
-                Object.keys(sourcesErrors).length === 0 && (
-                  <p className="text-muted-foreground text-sm">
-                    No scrape summary data available.
-                  </p>
-                )}
-            </CardContent>
-          </Card>
         </>
       )}
     </div>

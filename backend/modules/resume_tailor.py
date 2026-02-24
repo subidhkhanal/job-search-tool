@@ -4,7 +4,8 @@ tailored summary lines, and gap analysis based on a job description.
 Uses Groq LLM for summary generation only; everything else is local.
 """
 
-PROJECTS = {
+# Default fallbacks — used when profile DB is unavailable
+_DEFAULT_PROJECTS = {
     "Agentic RAG Knowledge Base": {
         "keywords": [
             "rag", "langchain", "vector", "chromadb", "llm", "ai",
@@ -31,7 +32,7 @@ PROJECTS = {
     },
 }
 
-RESUME_SKILLS = [
+_DEFAULT_RESUME_SKILLS = [
     "LangChain", "RAG Pipelines", "Agentic AI", "Hybrid Search",
     "RAGAS", "Python", "FastAPI", "REST APIs", "Web Scraping",
     "Automation Pipelines", "Next.js", "Tailwind CSS", "ChromaDB",
@@ -56,13 +57,41 @@ SKILL_DIFFICULTY = {
     ],
 }
 
+# Backward-compatible references for other modules that import these
+PROJECTS = _DEFAULT_PROJECTS
+RESUME_SKILLS = _DEFAULT_RESUME_SKILLS
+
+
+def _get_projects():
+    """Try to load projects from DB, fall back to hardcoded default."""
+    try:
+        from profile import get_projects
+        projects = get_projects()
+        if projects:
+            return projects
+    except Exception:
+        pass
+    return _DEFAULT_PROJECTS
+
+
+def _get_skills():
+    """Try to load skills from DB, fall back to hardcoded default."""
+    try:
+        from profile import get_skills
+        skills = get_skills()
+        if skills:
+            return skills
+    except Exception:
+        pass
+    return _DEFAULT_RESUME_SKILLS
+
 
 def suggest_project_order(jd_text):
     """Rank projects by keyword match count against the JD."""
     jd_lower = jd_text.lower()
     results = []
 
-    for name, info in PROJECTS.items():
+    for name, info in _get_projects().items():
         matches = [kw for kw in info["keywords"] if kw in jd_lower]
         results.append({
             "project": name,
@@ -82,7 +111,7 @@ def suggest_skill_order(jd_text):
     relevant = []
     other = []
 
-    for skill in RESUME_SKILLS:
+    for skill in _get_skills():
         if skill.lower() in jd_lower:
             relevant.append(skill)
         else:
@@ -96,7 +125,7 @@ def analyze_gaps(jd_text):
     from jd_analyzer import _extract_tech_keywords, ALL_MY_SKILLS
 
     jd_keywords = _extract_tech_keywords(jd_text)
-    resume_lower = [s.lower() for s in RESUME_SKILLS]
+    resume_lower = [s.lower() for s in _get_skills()]
 
     gaps = []
     for kw in jd_keywords:
@@ -130,6 +159,19 @@ def analyze_gaps(jd_text):
 
 def generate_summary_lines(client, job_title, jd_text):
     """Use LLM to generate 3 tailored one-line resume summaries."""
+    try:
+        from profile import get_profile_text
+        candidate_bg = get_profile_text() or ""
+    except Exception:
+        candidate_bg = ""
+    if not candidate_bg:
+        candidate_bg = (
+            "- AI Engineer Intern at PathToPR.ca — built automated data pipelines with OpenAI/Gemini APIs\n"
+            "- M.Tech AI from Amity University (graduating March 2026)\n"
+            "- Built Agentic RAG Knowledge Base with hybrid retrieval, LangChain, ChromaDB, FastAPI\n"
+            "- Built BCT Engineering Notes blog — 2.2M+ views, 904% YOY growth"
+        )
+
     prompt = f"""Generate exactly 3 one-line resume summary options (each under 20 words)
 tailored for this specific role.
 
@@ -139,10 +181,7 @@ JOB DESCRIPTION (key parts):
 {jd_text[:1500]}
 
 CANDIDATE BACKGROUND:
-- AI Engineer Intern at PathToPR.ca — built automated data pipelines with OpenAI/Gemini APIs
-- M.Tech AI from Amity University (graduating March 2026)
-- Built Agentic RAG Knowledge Base with hybrid retrieval, LangChain, ChromaDB, FastAPI
-- Built BCT Engineering Notes blog — 2.2M+ views, 904% YOY growth
+{candidate_bg}
 
 RULES:
 1. Each summary must be under 20 words

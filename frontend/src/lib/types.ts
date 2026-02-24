@@ -96,17 +96,10 @@ export interface ScrapedJob {
   score: number;
   work_mode?: string;
   llm_reason?: string;
-}
-
-export interface SSEEvent {
-  event: string;
-  message?: string;
-  sources_status?: Record<string, number>;
-  sources_errors?: Record<string, string>;
-  total_jobs?: number;
-  jobs_count?: number;
-  jobs?: ScrapedJob[];
-  total?: number;
+  verdict?: string;
+  ats_score?: number;
+  skill_match?: number;
+  noc_verdict?: string;
 }
 
 // ---- Messages ----
@@ -299,4 +292,49 @@ export interface UpdateDemoRequest {
   demo_url?: string;
   hours_spent?: number;
   result?: string;
+}
+
+// ---- Profile ----
+export interface ProjectEntry {
+  name: string;
+  description: string;
+  keywords: string[];
+}
+
+export interface ExperienceEntry {
+  role: string;
+  company: string;
+  period: string;
+  description: string;
+}
+
+export interface UserProfile {
+  id?: number;
+  username: string;
+  full_name: string;
+  bio: string;
+  skills: string[];
+  projects: ProjectEntry[];
+  experience: ExperienceEntry[];
+  education: string;
+  location_preference: string;
+  target_roles: string[];
+  resume_text: string;
+  blocked_companies: string[];
+  scoring_weights: Record<string, unknown>;
+  updated_at?: string;
+}
+
+export interface UserProfileUpdate {
+  full_name?: string;
+  bio?: string;
+  skills?: string[];
+  projects?: ProjectEntry[];
+  experience?: ExperienceEntry[];
+  education?: string;
+  location_preference?: string;
+  target_roles?: string[];
+  resume_text?: string;
+  blocked_companies?: string[];
+  scoring_weights?: Record<string, unknown>;
 }

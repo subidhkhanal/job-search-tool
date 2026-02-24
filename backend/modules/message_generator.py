@@ -1,6 +1,7 @@
 from groq import Groq
 
-SUBIDH_PROFILE = """
+# Default fallback — used when profile DB is unavailable
+_DEFAULT_PROFILE = """
 - AI Engineer Intern at PathToPR.ca (Dec 2025 – Present): Built automated data ingestion pipeline, integrated OpenAI and Gemini APIs for content generation and summarization, automated multi-platform publishing (Facebook, Instagram, Telegram, X, Threads) — reduced manual content creation from hours to minutes
 - M.Tech in Artificial Intelligence from Amity University Noida (graduating March 2026)
 - Built Agentic RAG Knowledge Base: document Q&A system with hybrid retrieval (dense + BM25 via reciprocal rank fusion), query routing, RAGAS evaluation framework. Tech: Python, FastAPI, LangChain, ChromaDB, OpenAI, Cohere, Next.js
@@ -9,14 +10,32 @@ SUBIDH_PROFILE = """
 - Currently building Gen AI projects and actively looking for AI/ML roles (internship or full-time) in India
 """
 
-def generate_cold_dm(client, company_name, role_title, company_description, 
-                     platform="LinkedIn", tone="professional", project_link=""):
+
+def _get_profile_text():
+    """Try to load profile from DB, fall back to hardcoded default."""
+    try:
+        from profile import get_profile_text
+        text = get_profile_text()
+        if text:
+            return text
+    except Exception:
+        pass
+    return _DEFAULT_PROFILE
+
+
+# Backward-compatible reference for other modules that import SUBIDH_PROFILE
+SUBIDH_PROFILE = _DEFAULT_PROFILE
+
+def generate_cold_dm(client, company_name, role_title, company_description,
+                     platform="LinkedIn", tone="professional", project_link="",
+                     profile_text=""):
     """Generate a personalized cold DM for a specific company."""
-    
-    prompt = f"""You are helping a job seeker write a cold outreach message. 
-    
+    sender_profile = profile_text or _get_profile_text()
+
+    prompt = f"""You are helping a job seeker write a cold outreach message.
+
 ABOUT THE SENDER:
-{SUBIDH_PROFILE}
+{sender_profile}
 
 TARGET:
 - Company: {company_name}
@@ -54,10 +73,11 @@ Format each as ready-to-copy text.
     
     return response.choices[0].message.content
 
-def generate_follow_up(client, company_name, role_title, days_since_applied, 
-                       original_platform="LinkedIn"):
+def generate_follow_up(client, company_name, role_title, days_since_applied,
+                       original_platform="LinkedIn", profile_text=""):
     """Generate a follow-up message after no response."""
-    
+    sender_profile = profile_text or _get_profile_text()
+
     prompt = f"""Write a follow-up message for a job application.
 
 CONTEXT:
@@ -66,7 +86,7 @@ CONTEXT:
 - Platform: {original_platform}
 
 SENDER PROFILE:
-{SUBIDH_PROFILE}
+{sender_profile}
 
 RULES:
 1. Keep it under 60 words
@@ -92,14 +112,15 @@ Generate 1 follow-up message, ready to copy.
     
     return response.choices[0].message.content
 
-def generate_cover_letter(client, company_name, role_title, job_description, 
-                          company_info=""):
+def generate_cover_letter(client, company_name, role_title, job_description,
+                          company_info="", profile_text=""):
     """Generate a concise, non-generic cover letter."""
-    
+    sender_profile = profile_text or _get_profile_text()
+
     prompt = f"""Write a cover letter for a job/internship application.
 
 SENDER PROFILE:
-{SUBIDH_PROFILE}
+{sender_profile}
 
 APPLICATION:
 - Company: {company_name}
@@ -162,8 +183,9 @@ Generate the thank-you message.
 
 
 def generate_referral_request(client, contact_name, contact_role, company,
-                              role_applying_for, relationship):
+                              role_applying_for, relationship, profile_text=""):
     """Generate a referral request message tailored to the relationship type."""
+    sender_profile = profile_text or _get_profile_text()
 
     if relationship in ("College alumni", "Friend", "Friend of friend"):
         tone_instruction = "Warm, casual tone — you know this person. Use first name."
@@ -173,7 +195,7 @@ def generate_referral_request(client, contact_name, contact_role, company,
     prompt = f"""Write a referral request message.
 
 ABOUT YOU:
-{SUBIDH_PROFILE}
+{sender_profile}
 
 TARGET CONTACT:
 - Name: {contact_name}
@@ -206,13 +228,14 @@ Generate 1 message, ready to copy.
 
 
 def generate_demo_outreach(client, company, role, demo_url, demo_description,
-                           company_desc):
+                           company_desc, profile_text=""):
     """Generate an outreach message that leads with a demo you built."""
+    sender_profile = profile_text or _get_profile_text()
 
     prompt = f"""Write an outreach message leading with a mini demo/prototype.
 
 ABOUT YOU:
-{SUBIDH_PROFILE}
+{sender_profile}
 
 CONTEXT:
 - Company: {company}

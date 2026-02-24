@@ -6,12 +6,6 @@ from urllib.parse import quote_plus
 from tracker import save_scraped_job
 
 
-def generate_career_url(company, title=""):
-    """Google search URL targeting the company's career page for this role."""
-    query = f'{company} careers "{title}"' if title else f'{company} careers jobs'
-    return f"https://www.google.com/search?q={quote_plus(query)}"
-
-
 def _get_with_retry(url, max_attempts=3, timeout=15, **kwargs):
     """GET request with exponential backoff retry."""
     last_exc = None
@@ -321,42 +315,6 @@ def scrape_jobspy():
     return jobs
 
 
-def scrape_wellfound_search_hint():
-    """
-    Wellfound doesn't have a public API and scraping it violates TOS.
-    Instead, this generates optimized search URLs for manual browsing.
-    """
-    base = "https://wellfound.com/jobs"
-    searches = [
-        f"{base}?q=ai+intern&remote=true",
-        f"{base}?q=machine+learning+intern&remote=true",
-        f"{base}?q=llm+intern&remote=true",
-        f"{base}?q=gen+ai+intern&remote=true",
-        f"{base}?q=python+intern&remote=true",
-        f"{base}?q=data+science+intern&remote=true",
-    ]
-    return searches
-
-def scrape_linkedin_search_urls():
-    """
-    LinkedIn automation gets accounts banned.
-    Instead, generate optimized search URLs for manual browsing.
-    """
-    base = "https://www.linkedin.com/jobs/search/?"
-    searches = []
-    queries_ncr = [
-        ("ai intern remote", "India"),
-        ("machine learning intern remote", "India"),
-        ("llm intern remote", "India"),
-        ("gen ai intern remote", "India"),
-        ("data science intern remote", "India"),
-        ("python intern remote", "India"),
-        ("ai ml internship remote", "India"),
-    ]
-    for q, loc in queries_ncr:
-        url = f"{base}keywords={q.replace(' ', '%20')}&location={loc}"
-        searches.append({"query": q, "url": url})
-    return searches
 
 def scrape_hasjob():
     """Scrape HasJob by HasGeek for AI/ML jobs in India."""

@@ -13,8 +13,24 @@ from tracker import (
 from scraper import run_all_scrapers
 from send_email import build_email_content, send_email, get_alert_number
 
-# Companies to exclude from battle plan (scams, bad reputation, etc.)
-BLOCKED_COMPANIES = {"turing"}
+# Default fallback blocked list
+_DEFAULT_BLOCKED = {"turing"}
+
+
+def _get_blocked_companies():
+    """Try to load blocked companies from DB, fall back to hardcoded default."""
+    try:
+        from profile import get_blocked_companies
+        blocked = get_blocked_companies()
+        if blocked is not None:
+            return blocked
+    except Exception:
+        pass
+    return _DEFAULT_BLOCKED
+
+
+# Backward-compatible reference
+BLOCKED_COMPANIES = _DEFAULT_BLOCKED
 
 
 def score_job(job):
@@ -131,18 +147,6 @@ def score_job(job):
     return score
 
 
-def _get_relevance_label(score):
-    """Return a relevance label emoji + text for a given score."""
-    if score >= 35:
-        return "\U0001f525 PERFECT FIT"
-    elif score >= 25:
-        return "\u2b50 STRONG MATCH"
-    elif score >= 15:
-        return "\U0001f4cc WORTH APPLYING"
-    else:
-        return "\U0001f4cb STRETCH"
-
-
 def llm_rerank_jobs(jobs, top_n=20):
     """
     Use Groq LLM to re-rank the top N keyword-scored jobs.
@@ -173,11 +177,22 @@ def llm_rerank_jobs(jobs, top_n=20):
             f"    Description: {j.get('description', '')[:300]}\n"
         )
 
+    # Build candidate description from profile or use default
+    try:
+        from profile import get_profile_text
+        candidate_desc = get_profile_text()
+    except Exception:
+        candidate_desc = None
+    if not candidate_desc:
+        candidate_desc = (
+            "- M.Tech AI student, graduating March 2026, based in Noida (Delhi NCR)\n"
+            "- Skills: Python, LangChain, RAG pipelines, FastAPI, ChromaDB, agentic AI, web scraping, automation\n"
+            "- Preference: AI/ML roles, onsite or hybrid in Delhi NCR; open to remote\n"
+            "- Acceptable: intern, fresher, junior, entry-level, 0-2 years experience"
+        )
+
     prompt = f"""You are a strict job relevance scorer. Rate each job for this candidate:
-- M.Tech AI student, graduating March 2026, based in Noida (Delhi NCR)
-- Skills: Python, LangChain, RAG pipelines, FastAPI, ChromaDB, agentic AI, web scraping, automation
-- Preference: AI/ML roles, onsite or hybrid in Delhi NCR; open to remote
-- Acceptable: intern, fresher, junior, entry-level, 0-2 years experience
+{candidate_desc}
 
 SCORING RULES — follow strictly:
 - Score 0: Role title has nothing to do with tech/engineering/AI/ML/data/software (e.g., "Marketing Student", "Sales Rep", "Account Manager", "HR Coordinator")
@@ -258,13 +273,31 @@ def main():
         job["score"] = score_job(job)
     new_jobs = [j for j in new_jobs if j["score"] > -100]
     new_jobs = [j for j in new_jobs if j.get("score", 0) >= 20]
-    new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in BLOCKED_COMPANIES]
+    new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
     new_jobs.sort(key=lambda j: j["score"], reverse=True)
 
     # LLM re-ranking for top candidates
     if new_jobs:
         print("\nRunning LLM re-ranking on top candidates...")
         new_jobs = llm_rerank_jobs(new_jobs, top_n=20)
+
+    # Auto-analyze top jobs for verdict/ATS
+    if new_jobs:
+        print("\nRunning auto-analysis on top jobs...")
+        try:
+            from jd_analyzer import full_analyze, quick_ats
+            for job in new_jobs[:15]:
+                try:
+                    result = full_analyze(job.get("title", ""), job.get("description", ""))
+                    job["verdict"] = result.get("verdict_label", "")
+                    job["ats_score"] = quick_ats(job.get("description", ""))
+                    job["skill_match"] = result.get("skills", {}).get("match_percentage", 0)
+                    job["noc_verdict"] = result.get("noc", {}).get("confidence", "")
+                except Exception:
+                    pass
+            print(f"Auto-analysis complete for top {min(15, len(new_jobs))} jobs.")
+        except ImportError:
+            print("jd_analyzer not available — skipping auto-analysis.")
 
     # Save new jobs to database
     print("\nSaving new jobs to database...")
@@ -278,6 +311,8 @@ def main():
                 url=job.get("url", ""),
                 description=job.get("description", ""),
                 score=job.get("score", 0),
+                verdict=job.get("verdict", ""),
+                ats_score=job.get("ats_score", 0),
             )
         except Exception:
             pass

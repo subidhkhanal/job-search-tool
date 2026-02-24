@@ -12,7 +12,6 @@ import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime
 
 import markdown
 
@@ -93,20 +92,19 @@ def build_email_content(jobs, sources_status, sources_errors=None):
     lines = []
 
     if jobs:
-        lines.append("| # | Title | Paid/Unpaid | Duration | Link |")
-        lines.append("|---|-------|------------|----------|------|")
+        lines.append("| # | Title | Company | Location | Score | Verdict | Link |")
+        lines.append("|---|-------|---------|----------|-------|---------|------|")
 
-        for idx, j in enumerate(jobs[:25], 1):
-            title = j.get("title", "Untitled").replace("|", "/").strip()[:60]
+        for idx, j in enumerate(jobs[:40], 1):
+            title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
+            company = j.get("company", "-").replace("|", "/").strip()[:25]
+            location = j.get("location", "-").replace("|", "/").strip()[:20]
+            score = j.get("score", 0)
+            verdict = j.get("verdict", "-").replace("|", "/").strip()[:15]
             url = j.get("url", "")
-            desc = j.get("description", "")
-            full_text = title + " " + desc
-
-            paid = _detect_paid_status(full_text)
-            duration = _detect_duration(full_text)
             link = f"[Apply]({url})" if url else "-"
 
-            lines.append(f"| {idx} | {title} | {paid} | {duration} | {link} |")
+            lines.append(f"| {idx} | {title} | {company} | {location} | {score} | {verdict} | {link} |")
     else:
         lines.append("No new internships found.")
 

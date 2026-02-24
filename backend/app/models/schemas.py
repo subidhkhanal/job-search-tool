@@ -2,6 +2,52 @@ from pydantic import BaseModel
 from typing import Optional
 
 
+# ---- Profile ----
+
+class ProjectEntry(BaseModel):
+    name: str = ""
+    description: str = ""
+    keywords: list[str] = []
+
+
+class ExperienceEntry(BaseModel):
+    role: str = ""
+    company: str = ""
+    period: str = ""
+    description: str = ""
+
+
+class UserProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    bio: Optional[str] = None
+    skills: Optional[list[str]] = None
+    projects: Optional[list[ProjectEntry]] = None
+    experience: Optional[list[ExperienceEntry]] = None
+    education: Optional[str] = None
+    location_preference: Optional[str] = None
+    target_roles: Optional[list[str]] = None
+    resume_text: Optional[str] = None
+    blocked_companies: Optional[list[str]] = None
+    scoring_weights: Optional[dict] = None
+
+
+class UserProfileResponse(BaseModel):
+    id: Optional[int] = None
+    username: str = "subidh"
+    full_name: str = ""
+    bio: str = ""
+    skills: list[str] = []
+    projects: list[ProjectEntry] = []
+    experience: list[ExperienceEntry] = []
+    education: str = ""
+    location_preference: str = ""
+    target_roles: list[str] = []
+    resume_text: str = ""
+    blocked_companies: list[str] = []
+    scoring_weights: dict = {}
+    updated_at: Optional[str] = None
+
+
 # ---- Auth ----
 
 class LoginRequest(BaseModel):

@@ -17,8 +17,22 @@ class Settings(BaseSettings):
     WELLFOUND_DATADOME: str = ""
     GMAIL_ADDRESS: str = ""
     GMAIL_APP_PASSWORD: str = ""
+    FRONTEND_URL: str = ""
+    CORS_ORIGINS: str = ""  # Comma-separated list of allowed origins
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    def get_cors_origins(self) -> list[str]:
+        """Build the list of allowed CORS origins from config."""
+        origins = ["http://localhost:3000", "http://localhost:3001"]
+        if self.FRONTEND_URL:
+            origins.append(self.FRONTEND_URL.rstrip("/"))
+        if self.CORS_ORIGINS:
+            for origin in self.CORS_ORIGINS.split(","):
+                stripped = origin.strip().rstrip("/")
+                if stripped and stripped not in origins:
+                    origins.append(stripped)
+        return origins
 
 
 @lru_cache

@@ -144,7 +144,8 @@ def get_existing_job_urls():
 
 
 def save_scraped_job(title, company, location, source, url, description="",
-                     score=0, noc_verdict="", skill_match=0):
+                     score=0, noc_verdict="", skill_match=0,
+                     verdict="", ats_score=0):
     db = _get_client()
     try:
         db.table("scraped_jobs").upsert({
@@ -157,19 +158,27 @@ def save_scraped_job(title, company, location, source, url, description="",
             "score": score,
             "noc_verdict": noc_verdict or "",
             "skill_match": skill_match,
+            "verdict": verdict or "",
+            "ats_score": ats_score,
         }, on_conflict="url", ignore_duplicates=True).execute()
     except Exception:
         pass
 
 
-def update_scraped_job_analysis(job_id, score, noc_verdict, skill_match):
+def update_scraped_job_analysis(job_id, score, noc_verdict, skill_match,
+                                verdict="", ats_score=0):
     """Update a scraped job with analysis results."""
     db = _get_client()
-    db.table("scraped_jobs").update({
+    update_data = {
         "score": score,
         "noc_verdict": noc_verdict,
         "skill_match": skill_match,
-    }).eq("id", job_id).execute()
+    }
+    if verdict:
+        update_data["verdict"] = verdict
+    if ats_score:
+        update_data["ats_score"] = ats_score
+    db.table("scraped_jobs").update(update_data).eq("id", job_id).execute()
 
 
 def get_scraped_jobs(source=None):

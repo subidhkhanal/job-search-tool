@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { analyzeFullJD, checkATS } from "@/lib/api";
 import type { AnalysisResult, ATSResult } from "@/lib/types";
 
@@ -170,7 +171,9 @@ function ATSResultsDisplay({ ats }: { ats: ATSResult }) {
 // Main Page
 // ---------------------------------------------------------------------------
 
-export default function AnalyzerPage() {
+function AnalyzerPageInner() {
+  const searchParams = useSearchParams();
+
   // ---- Full Analysis state ----
   const [fullForm, setFullForm] = useState({
     title: "",
@@ -178,6 +181,21 @@ export default function AnalyzerPage() {
     company: "",
     custom_resume: "",
   });
+
+  // Pre-fill from query params (e.g. from Tonight's Plan)
+  useEffect(() => {
+    const title = searchParams.get("title");
+    const description = searchParams.get("description");
+    const company = searchParams.get("company");
+    if (title || description || company) {
+      setFullForm((prev) => ({
+        ...prev,
+        ...(title ? { title } : {}),
+        ...(description ? { description } : {}),
+        ...(company ? { company } : {}),
+      }));
+    }
+  }, [searchParams]);
   const [fullLoading, setFullLoading] = useState(false);
   const [fullResult, setFullResult] = useState<AnalysisResult | null>(null);
   const [fullError, setFullError] = useState<string | null>(null);
@@ -727,5 +745,13 @@ export default function AnalyzerPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+export default function AnalyzerPage() {
+  return (
+    <Suspense>
+      <AnalyzerPageInner />
+    </Suspense>
   );
 }

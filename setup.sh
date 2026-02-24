@@ -7,17 +7,17 @@ echo ""
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 echo ""
 
-# Initialize database
-echo "Initializing database..."
-python -c "from tracker import init_db; init_db(); print('Database initialized.')"
+# Install frontend dependencies
+echo "Installing frontend dependencies..."
+cd frontend && npm install && cd ..
 echo ""
 
-# Test scrapers (dry run)
-echo "Testing scraper imports..."
-python -c "from scraper import run_all_scrapers; print('Scraper imports OK')"
+# Test module imports
+echo "Testing module imports..."
+cd backend/modules && python -c "from nightly import score_job; print('Module imports OK')" && cd ../..
 echo ""
 
 # Check for API keys
@@ -32,8 +32,8 @@ echo ""
 echo "=== Setup Complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Run the Streamlit app:  streamlit run app.py"
-echo "  2. Test nightly pipeline:  python nightly.py"
+echo "  1. Start the backend:    cd backend && uvicorn app.main:app --reload"
+echo "  2. Start the frontend:   cd frontend && npm run dev"
 echo "  3. Push to GitHub and set secrets for GitHub Actions"
-echo "  4. Load Chrome extension:  chrome://extensions → Load unpacked → chrome-extension/"
+echo "  4. Load Chrome extension: chrome://extensions → Load unpacked → chrome-extension/"
 echo ""
