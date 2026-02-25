@@ -159,8 +159,8 @@ def scrape_hn_who_is_hiring():
 
             text_clean = BeautifulSoup(text, "html.parser").get_text()
 
-            # Check if it matches remote + internship + allowed location
-            if not (is_remote(text_clean) and is_internship(text_clean)):
+            # Check if it matches internship + allowed location
+            if not is_internship(text_clean):
                 continue
             if not is_allowed_location(text_clean):
                 continue
@@ -218,10 +218,8 @@ def scrape_arbeitnow():
             location = job.get("location", "")
 
             combined = title + " " + desc[:500] + " " + location
-            is_remote_job = job.get("remote", False) or is_remote(combined)
-            is_intern = is_internship(combined)
 
-            if is_remote_job and is_intern and is_allowed_location(combined):
+            if is_internship(combined) and is_allowed_location(combined):
                 job_data = {
                     "title": title,
                     "company": job.get("company_name", "Unknown"),
@@ -266,7 +264,6 @@ def scrape_jobspy():
                 hours_old=72,
                 country_indeed="India",
                 job_type="internship",
-                is_remote=True,
                 linkedin_fetch_description=True,
             )
 
@@ -633,8 +630,6 @@ def scrape_jooble():
 
                 if not is_internship(combined):
                     continue
-                if not is_remote(combined):
-                    continue
                 if not is_allowed_location(combined):
                     continue
 
@@ -686,12 +681,8 @@ def scrape_simplify_internships():
             apply_url = link_match.group(1) if link_match else ""
 
             combined = title + " " + company + " " + location
-            # All entries are internships — filter by remote or India location
-            location_lower = location.lower()
-            is_remote_job = any(kw in location_lower for kw in ["remote", "anywhere", "worldwide", "flexible"])
-            is_india_job = any(kw in location_lower for kw in ["india", "bangalore", "bengaluru", "hyderabad",
-                                                                "mumbai", "pune", "delhi", "noida", "chennai"])
-            if not is_remote_job and not is_india_job:
+            # All entries are internships — filter by India location
+            if not is_allowed_location(combined):
                 continue
 
             job_data = {
@@ -815,8 +806,6 @@ def scrape_wellfound_graphql():
                             location = "Unknown"
 
                         combined = jl_title + " " + jl_desc[:300] + " " + location
-                        if not is_remote(combined):
-                            continue
                         if not is_allowed_location(combined):
                             continue
 
@@ -932,7 +921,6 @@ def scrape_linkedin_guest():
                     f"&location=India"
                     f"&f_TP=1%2C2"
                     f"&f_JT=I"
-                    f"&f_WT=2"
                     f"&start={start}"
                 )
 
