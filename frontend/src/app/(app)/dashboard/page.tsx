@@ -69,7 +69,7 @@ export default function DashboardPage() {
           platformRes,
           statusFunnelRes,
           roleAnalysisRes,
-        ] = await Promise.all([
+        ] = await Promise.allSettled([
           getDashboard(),
           getFollowUps(),
           getWeeklyTrend(),
@@ -78,12 +78,12 @@ export default function DashboardPage() {
           getRoleAnalysis(),
         ]);
 
-        setStats(dashboardRes);
-        setFollowUps(followUpsRes);
-        setWeeklyTrend(weeklyTrendRes);
-        setPlatformData(platformRes);
-        setStatusFunnel(statusFunnelRes);
-        setRoleAnalysis(roleAnalysisRes);
+        if (dashboardRes.status === "fulfilled") setStats(dashboardRes.value);
+        if (followUpsRes.status === "fulfilled") setFollowUps(Array.isArray(followUpsRes.value) ? followUpsRes.value : []);
+        if (weeklyTrendRes.status === "fulfilled") setWeeklyTrend(Array.isArray(weeklyTrendRes.value) ? weeklyTrendRes.value : []);
+        if (platformRes.status === "fulfilled") setPlatformData(Array.isArray(platformRes.value) ? platformRes.value : []);
+        if (statusFunnelRes.status === "fulfilled" && statusFunnelRes.value && typeof statusFunnelRes.value === "object") setStatusFunnel(statusFunnelRes.value);
+        if (roleAnalysisRes.status === "fulfilled") setRoleAnalysis(Array.isArray(roleAnalysisRes.value) ? roleAnalysisRes.value : []);
       } catch (err) {
         console.error("Failed to load dashboard data", err);
       } finally {
@@ -282,11 +282,11 @@ export default function DashboardPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Progress
-                          value={p.response_rate}
+                          value={p.response_rate ?? 0}
                           className="h-2 flex-1"
                         />
                         <span className="text-muted-foreground w-12 text-right text-xs">
-                          {p.response_rate.toFixed(1)}%
+                          {(p.response_rate ?? 0).toFixed(1)}%
                         </span>
                       </div>
                     </TableCell>
@@ -406,7 +406,7 @@ export default function DashboardPage() {
                     <TableCell className="text-right">{r.applied}</TableCell>
                     <TableCell className="text-right">{r.responses}</TableCell>
                     <TableCell className="text-right">
-                      {r.response_rate.toFixed(1)}%
+                      {(r.response_rate ?? 0).toFixed(1)}%
                     </TableCell>
                   </TableRow>
                 ))}
