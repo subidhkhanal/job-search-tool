@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import type { AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -101,8 +102,13 @@ export function NotificationBell() {
         await unsubscribePush(existingSub.toJSON());
         await existingSub.unsubscribe();
         setPushEnabled(false);
+        toast.success("Push notifications disabled");
       } else {
         const { public_key } = await getVapidPublicKey();
+        if (!public_key) {
+          toast.error("VAPID key not configured on server");
+          return;
+        }
         const applicationServerKey = urlBase64ToUint8Array(public_key);
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
@@ -110,8 +116,11 @@ export function NotificationBell() {
         });
         await subscribePush(sub.toJSON());
         setPushEnabled(true);
+        toast.success("Push notifications enabled");
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`Push failed: ${msg}`);
       console.error("Push toggle failed:", err);
     } finally {
       setPushLoading(false);
