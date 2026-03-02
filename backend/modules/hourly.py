@@ -10,6 +10,7 @@ from datetime import datetime
 from tracker import (
     init_db, save_scraped_job, save_email_log, get_existing_job_urls,
     save_notification, init_notifications_table,
+    send_push_notifications,
 )
 from scraper import run_all_scrapers
 from send_email import build_email_content, send_email, get_alert_number
@@ -334,6 +335,17 @@ def main():
         )
     except Exception as e:
         print(f"  WARNING: Could not save notification: {e}")
+
+    # Send push notification to subscribed devices
+    print("Sending push notification...")
+    try:
+        send_push_notifications(
+            title=f"Job Alert #{alert_number}",
+            body=f"{len(new_jobs)} new jobs found",
+            url="/tonight",
+        )
+    except Exception as e:
+        print(f"  WARNING: Could not send push notification: {e}")
 
     print(f"\nDone! Job Alert #{alert_number} sent: {email_sent}. {len(new_jobs)} new jobs.")
 

@@ -28,7 +28,7 @@ from .routers import (
 
 # Inject env vars from settings so modules read them via os.environ
 settings = get_settings()
-for key in ("SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "JOOBLE_API_KEY", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"):
+for key in ("SUPABASE_URL", "SUPABASE_KEY", "GROQ_API_KEY", "JOOBLE_API_KEY", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD", "VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_CLAIM_EMAIL"):
     val = getattr(settings, key, "")
     if val:
         os.environ[key] = val
@@ -56,6 +56,11 @@ app.include_router(referrals.router, prefix="/api/referrals", tags=["Referrals"]
 app.include_router(mini_demos.router, prefix="/api/demos", tags=["Mini Demos"])
 app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+
+
+@app.get("/api/vapid-public-key")
+def vapid_public_key():
+    return {"public_key": settings.VAPID_PUBLIC_KEY}
 
 
 @app.get("/api/health")

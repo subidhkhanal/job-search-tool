@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { Bell } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -9,14 +9,31 @@ import {
   getUnreadCount,
   markNotificationRead,
   markAllNotificationsRead,
+  getVapidPublicKey,
+  subscribePush,
+  unsubscribePush,
 } from "@/lib/api";
 import type { AppNotification } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray.buffer as ArrayBuffer;
+}
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushSupported, setPushSupported] = useState(false);
 
   const fetchUnreadCount = useCallback(async () => {
     try {
@@ -60,6 +77,45 @@ export function NotificationBell() {
     await markAllNotificationsRead();
     setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
     setUnreadCount(0);
+  };
+
+  // Check push notification support and current state
+  useEffect(() => {
+    async function checkPush() {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+      setPushSupported(true);
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      setPushEnabled(!!sub);
+    }
+    checkPush();
+  }, []);
+
+  const handleTogglePush = async () => {
+    setPushLoading(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existingSub = await reg.pushManager.getSubscription();
+
+      if (existingSub) {
+        await unsubscribePush(existingSub.toJSON());
+        await existingSub.unsubscribe();
+        setPushEnabled(false);
+      } else {
+        const { public_key } = await getVapidPublicKey();
+        const applicationServerKey = urlBase64ToUint8Array(public_key);
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+        await subscribePush(sub.toJSON());
+        setPushEnabled(true);
+      }
+    } catch (err) {
+      console.error("Push toggle failed:", err);
+    } finally {
+      setPushLoading(false);
+    }
   };
 
   const formatTime = (dateStr: string) => {
@@ -138,6 +194,34 @@ export function NotificationBell() {
                 ))
               )}
             </div>
+            {pushSupported && (
+              <>
+                <Separator />
+                <div className="flex items-center justify-between p-3">
+                  <span className="text-xs text-muted-foreground">
+                    Push notifications
+                  </span>
+                  {pushLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <button
+                      onClick={handleTogglePush}
+                      className={cn(
+                        "relative h-5 w-9 rounded-full transition-colors",
+                        pushEnabled ? "bg-primary" : "bg-muted-foreground/30"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform",
+                          pushEnabled && "translate-x-4"
+                        )}
+                      />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </>
       )}

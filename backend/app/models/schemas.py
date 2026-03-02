@@ -191,3 +191,10 @@ class UpdateDemoRequest(BaseModel):
     demo_url: Optional[str] = None
     hours_spent: Optional[float] = None
     result: Optional[str] = None
+
+
+# ---- Push Subscriptions ----
+
+class PushSubscriptionRequest(BaseModel):
+    endpoint: str
+    keys: dict

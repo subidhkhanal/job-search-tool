@@ -307,3 +307,27 @@ export async function markAllNotificationsRead() {
     method: "POST",
   });
 }
+
+export async function getVapidPublicKey(): Promise<{ public_key: string }> {
+  return apiFetch<{ public_key: string }>("/api/vapid-public-key");
+}
+
+export async function subscribePush(subscription: PushSubscriptionJSON) {
+  return apiFetch<{ success: boolean }>("/api/notifications/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+    }),
+  });
+}
+
+export async function unsubscribePush(subscription: PushSubscriptionJSON) {
+  return apiFetch<{ success: boolean }>("/api/notifications/push/unsubscribe", {
+    method: "POST",
+    body: JSON.stringify({
+      endpoint: subscription.endpoint,
+      keys: subscription.keys,
+    }),
+  });
+}

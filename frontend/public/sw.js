@@ -72,6 +72,9 @@ self.addEventListener("push", (event) => {
     body: data.body || "New notification",
     icon: "/icon-192x192.png",
     badge: "/icon-192x192.png",
+    vibrate: [200, 100, 200, 100, 200],
+    tag: "job-alert",
+    renotify: true,
     data: { url: data.url || "/dashboard" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

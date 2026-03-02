@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     WELLFOUND_DATADOME: str = ""
     GMAIL_ADDRESS: str = ""
     GMAIL_APP_PASSWORD: str = ""
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_CLAIM_EMAIL: str = ""
     FRONTEND_URL: str = ""
     CORS_ORIGINS: str = ""  # Comma-separated list of allowed origins
 

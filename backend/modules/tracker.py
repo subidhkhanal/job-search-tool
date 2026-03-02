@@ -607,3 +607,93 @@ def mark_all_notifications_read():
     """Mark all notifications as read."""
     db = _get_client()
     db.table("notifications").update({"is_read": True}).eq("is_read", False).execute()
+
+
+# ===================== PUSH SUBSCRIPTION FUNCTIONS =====================
+
+def save_push_subscription(endpoint, keys_p256dh, keys_auth):
+    """Save or update a push subscription."""
+    db = _get_client()
+    try:
+        db.table("push_subscriptions").upsert({
+            "endpoint": endpoint,
+            "keys_p256dh": keys_p256dh,
+            "keys_auth": keys_auth,
+        }, on_conflict="endpoint").execute()
+    except Exception as e:
+        print(f"Failed to save push subscription: {e}")
+
+
+def delete_push_subscription(endpoint):
+    """Remove a push subscription."""
+    db = _get_client()
+    try:
+        db.table("push_subscriptions").delete().eq("endpoint", endpoint).execute()
+    except Exception as e:
+        print(f"Failed to delete push subscription: {e}")
+
+
+def get_all_push_subscriptions():
+    """Get all stored push subscriptions."""
+    try:
+        db = _get_client()
+        resp = db.table("push_subscriptions").select("*").execute()
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def send_push_notifications(title, body, url="/dashboard"):
+    """Send a web push notification to all subscribed devices."""
+    import json
+    import os
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        print("pywebpush not installed -- skipping push notifications.")
+        return
+
+    vapid_private_key = os.environ.get("VAPID_PRIVATE_KEY", "")
+    vapid_claims_email = os.environ.get("VAPID_CLAIM_EMAIL", "")
+
+    if not vapid_private_key or not vapid_claims_email:
+        print("VAPID keys not configured -- skipping push notifications.")
+        return
+
+    subscriptions = get_all_push_subscriptions()
+    if not subscriptions:
+        print("No push subscriptions found -- skipping push.")
+        return
+
+    payload = json.dumps({
+        "title": title,
+        "body": body,
+        "url": url,
+    })
+
+    sent = 0
+    for sub in subscriptions:
+        subscription_info = {
+            "endpoint": sub["endpoint"],
+            "keys": {
+                "p256dh": sub["keys_p256dh"],
+                "auth": sub["keys_auth"],
+            },
+        }
+        try:
+            webpush(
+                subscription_info=subscription_info,
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": vapid_claims_email},
+            )
+            sent += 1
+        except WebPushException as e:
+            print(f"Push failed for {sub['endpoint'][:50]}...: {e}")
+            if e.response and e.response.status_code in (404, 410):
+                delete_push_subscription(sub["endpoint"])
+                print("  Removed stale subscription.")
+        except Exception as e:
+            print(f"Push error: {e}")
+
+    print(f"Push notifications sent to {sent} device(s).")
