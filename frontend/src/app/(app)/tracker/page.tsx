@@ -6,6 +6,7 @@ import {
   getApplications,
   createApplication,
   updateApplicationStatus,
+  updateApplicationNotes,
   deleteApplication,
   getDemos,
   createDemo,
@@ -77,6 +78,9 @@ import {
   Pencil,
   MessageSquare,
   Mail,
+  StickyNote,
+  Check,
+  X as XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -101,20 +105,20 @@ const PLATFORMS = [
 
 const STATUSES = [
   "Applied",
+  "Assignment Submitted",
   "Interview",
   "Offer",
   "Rejected",
   "Ghosted",
-  "Withdrawn",
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   Applied: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  "Assignment Submitted": "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
   Interview: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   Offer: "bg-purple-500/15 text-purple-400 border-purple-500/30",
   Rejected: "bg-red-500/15 text-red-400 border-red-500/30",
   Ghosted: "bg-gray-500/15 text-gray-400 border-gray-500/30",
-  Withdrawn: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
 };
 
 const DEMO_STATUSES = ["Idea", "Building", "Deployed", "Shipped"] as const;
@@ -175,6 +179,11 @@ export default function TrackerPage() {
   const [deleteTarget, setDeleteTarget] = useState<Application | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // ---- Notes editing ----
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
 
   // ---- Mini Demos state ----
   const [demos, setDemos] = useState<MiniDemo[]>([]);
@@ -839,14 +848,75 @@ export default function TrackerPage() {
                         )}
                       </div>
 
-                      {app.notes && (
-                        <div className="text-sm">
+                      {/* Notes section */}
+                      <div className="text-sm">
+                        <div className="flex items-center gap-2 mb-1">
                           <p className="text-muted-foreground">Notes</p>
+                          {editingNoteId !== app.id && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={() => {
+                                setEditingNoteId(app.id);
+                                setNoteText(app.notes || "");
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                        {editingNoteId === app.id ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={noteText}
+                              onChange={(e) => setNoteText(e.target.value)}
+                              placeholder="Add a note..."
+                              className="min-h-[80px]"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                disabled={savingNote}
+                                onClick={async () => {
+                                  setSavingNote(true);
+                                  try {
+                                    await updateApplicationNotes(app.id, noteText.trim());
+                                    toast.success("Note saved");
+                                    setEditingNoteId(null);
+                                    await fetchApplications();
+                                  } catch {
+                                    toast.error("Failed to save note");
+                                  } finally {
+                                    setSavingNote(false);
+                                  }
+                                }}
+                              >
+                                {savingNote ? (
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Check className="mr-1 h-3 w-3" />
+                                )}
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditingNoteId(null)}
+                              >
+                                <XIcon className="mr-1 h-3 w-3" />
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : app.notes ? (
                           <p className="font-medium whitespace-pre-wrap">
                             {app.notes}
                           </p>
-                        </div>
-                      )}
+                        ) : (
+                          <p className="text-muted-foreground/50 italic">No notes yet</p>
+                        )}
+                      </div>
 
                       <Separator />
 

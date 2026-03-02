@@ -65,6 +65,11 @@ def update_status(app_id, new_status):
     db.table("applications").update({"status": new_status}).eq("id", app_id).execute()
 
 
+def update_notes(app_id, notes):
+    db = _get_client()
+    db.table("applications").update({"notes": notes}).eq("id", app_id).execute()
+
+
 def get_all_applications():
     db = _get_client()
     resp = db.table("applications").select("*").order("date_applied", desc=True).execute()

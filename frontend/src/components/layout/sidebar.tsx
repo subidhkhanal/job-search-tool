@@ -23,7 +23,7 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/tonight", label: "Tonight's Plan", icon: Moon },
+  { href: "/tonight", label: "Today Todo", icon: Moon },
   { href: "/analyzer", label: "JD Analyzer", icon: FileSearch },
   { href: "/messages", label: "Messages", icon: MessageSquare },
   { href: "/resume-tailor", label: "Resume Tailor", icon: FileText },

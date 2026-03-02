@@ -100,6 +100,13 @@ export async function updateApplicationStatus(id: number, status: string) {
   });
 }
 
+export async function updateApplicationNotes(id: number, notes: string) {
+  return apiFetch<{ success: boolean }>(`/api/applications/${id}/notes`, {
+    method: "PATCH",
+    body: JSON.stringify({ notes }),
+  });
+}
+
 export async function deleteApplication(id: number) {
   return apiFetch<{ success: boolean }>(`/api/applications/${id}`, {
     method: "DELETE",

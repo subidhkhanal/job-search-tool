@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, Query
 from typing import Optional
 
 from ..dependencies import get_current_user
-from ..models.schemas import AddApplicationRequest, UpdateStatusRequest
+from ..models.schemas import AddApplicationRequest, UpdateStatusRequest, UpdateNotesRequest
 from tracker import (
     add_application,
     delete_application,
     get_all_applications,
     update_status,
+    update_notes,
 )
 
 router = APIRouter()
@@ -58,6 +59,16 @@ def patch_status(
     _user: str = Depends(get_current_user),
 ):
     update_status(app_id, body.status)
+    return {"success": True}
+
+
+@router.patch("/{app_id}/notes")
+def patch_notes(
+    app_id: int,
+    body: UpdateNotesRequest,
+    _user: str = Depends(get_current_user),
+):
+    update_notes(app_id, body.notes)
     return {"success": True}
 
 

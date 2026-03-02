@@ -159,13 +159,13 @@ export default function DashboardPage() {
             <div>
               <p className="text-lg font-semibold">No applications yet</p>
               <p className="text-muted-foreground text-sm mt-1">
-                Start by checking tonight&apos;s scraped jobs and logging your first application.
+                Start by checking today&apos;s scraped jobs and logging your first application.
               </p>
             </div>
             <Button asChild>
               <Link href="/tonight">
                 <Moon className="mr-2 h-4 w-4" />
-                Go to Tonight&apos;s Plan
+                Go to Today Todo
               </Link>
             </Button>
           </CardContent>

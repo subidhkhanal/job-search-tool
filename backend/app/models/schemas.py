@@ -78,6 +78,10 @@ class UpdateStatusRequest(BaseModel):
     status: str
 
 
+class UpdateNotesRequest(BaseModel):
+    notes: str
+
+
 # ---- Scraped Jobs ----
 
 class MarkScrapedJobRequest(BaseModel):
