@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 from tracker import (
     init_db, save_scraped_job, save_email_log, get_existing_job_urls,
+    save_notification, init_notifications_table,
 )
 from scraper import run_all_scrapers
 from send_email import build_email_content, send_email, get_alert_number
@@ -224,6 +225,7 @@ def main():
 
     # Initialize database
     init_db()
+    init_notifications_table()
 
     # Run all automated scrapers
     print("Running scrapers...")
@@ -316,6 +318,22 @@ def main():
         )
     except Exception as e:
         print(f"  WARNING: Could not save email log to database: {e}")
+
+    # Save in-app notification
+    print("Saving in-app notification...")
+    try:
+        save_notification(
+            title=f"Job Alert #{alert_number}",
+            body=f"{len(new_jobs)} new jobs found",
+            notification_type="job_alert",
+            metadata={
+                "jobs_count": len(new_jobs),
+                "alert_number": alert_number,
+                "sources": sources_status,
+            },
+        )
+    except Exception as e:
+        print(f"  WARNING: Could not save notification: {e}")
 
     print(f"\nDone! Job Alert #{alert_number} sent: {email_sent}. {len(new_jobs)} new jobs.")
 

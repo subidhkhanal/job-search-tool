@@ -28,6 +28,7 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 import { useState } from "react";
+import { NotificationBell } from "./notification-bell";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -79,13 +80,16 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
       >
         {/* Header */}
-        <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
-          <ClipboardList className="h-5 w-5 shrink-0 text-sidebar-primary" />
-          {!collapsed && (
-            <span className="text-lg font-semibold text-sidebar-foreground truncate">
-              Job Search HQ
-            </span>
-          )}
+        <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
+          <div className="flex items-center gap-2">
+            <ClipboardList className="h-5 w-5 shrink-0 text-sidebar-primary" />
+            {!collapsed && (
+              <span className="text-lg font-semibold text-sidebar-foreground truncate">
+                Job Search HQ
+              </span>
+            )}
+          </div>
+          {!collapsed && <NotificationBell />}
         </div>
 
         {/* Nav */}

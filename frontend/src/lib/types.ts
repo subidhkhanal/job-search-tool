@@ -338,3 +338,18 @@ export interface UserProfileUpdate {
   blocked_companies?: string[];
   scoring_weights?: Record<string, unknown>;
 }
+
+// ---- Notifications ----
+export interface AppNotification {
+  id: number;
+  title: string;
+  body: string;
+  type: string;
+  metadata: Record<string, unknown>;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface UnreadCountResponse {
+  count: number;
+}
