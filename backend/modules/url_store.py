@@ -1,6 +1,6 @@
 """
 url_store.py — Persistent seen-URL tracking via a JSON file.
-Used to distinguish NEW jobs from previously-seen jobs across nightly runs.
+Used to distinguish NEW jobs from previously-seen jobs across hourly runs.
 On GitHub Actions, seen_urls.json is committed back to the repo after each run.
 """
 

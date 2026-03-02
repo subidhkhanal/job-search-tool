@@ -31,6 +31,8 @@ import type {
   UserProfile,
   UserProfileUpdate,
   WeeklyTrend,
+  AppNotification,
+  UnreadCountResponse,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -281,5 +283,27 @@ export async function updateProfile(data: UserProfileUpdate): Promise<UserProfil
   return apiFetch<UserProfile>("/api/profile/", {
     method: "PUT",
     body: JSON.stringify(data),
+  });
+}
+
+// ---- Notifications ----
+export async function getNotifications(unreadOnly = false): Promise<AppNotification[]> {
+  const qs = unreadOnly ? "?unread_only=true" : "";
+  return apiFetch<AppNotification[]>(`/api/notifications${qs}`);
+}
+
+export async function getUnreadCount(): Promise<UnreadCountResponse> {
+  return apiFetch<UnreadCountResponse>("/api/notifications/unread-count");
+}
+
+export async function markNotificationRead(id: number) {
+  return apiFetch<{ success: boolean }>(`/api/notifications/${id}/read`, {
+    method: "PATCH",
+  });
+}
+
+export async function markAllNotificationsRead() {
+  return apiFetch<{ success: boolean }>("/api/notifications/mark-all-read", {
+    method: "POST",
   });
 }

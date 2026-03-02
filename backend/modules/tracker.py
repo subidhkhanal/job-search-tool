@@ -89,16 +89,17 @@ def get_follow_ups_due():
 
 def get_stats():
     db = _get_client()
-    resp = db.table("applications").select("status, type, platform").execute()
+    resp = db.table("applications").select("status, type, platform, date_applied").execute()
     df = pd.DataFrame(resp.data)
 
     stats = {}
     if df.empty:
         stats['total'] = 0
         stats['applied'] = 0
-        stats['interviews'] = 0
-        stats['offers'] = 0
+        stats['interview'] = 0
+        stats['offer'] = 0
         stats['rejected'] = 0
+        stats['this_week'] = 0
         stats['jobs'] = 0
         stats['internships'] = 0
         stats['by_platform'] = []
@@ -107,9 +108,16 @@ def get_stats():
 
     stats['total'] = len(df)
     stats['applied'] = len(df[df['status'] == 'Applied'])
-    stats['interviews'] = len(df[df['status'] == 'Interview Scheduled'])
-    stats['offers'] = len(df[df['status'] == 'Offer'])
+    stats['interview'] = len(df[df['status'].isin(['Interview', 'Interview Scheduled', 'Interviewed'])])
+    stats['offer'] = len(df[df['status'] == 'Offer'])
     stats['rejected'] = len(df[df['status'] == 'Rejected'])
+
+    # Calculate this_week: all applications (jobs + internships) from the current week
+    today = datetime.now()
+    start_of_week = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
+    df_dates = pd.to_datetime(df['date_applied'], errors='coerce')
+    stats['this_week'] = int((df_dates >= start_of_week).sum())
+
     stats['jobs'] = len(df[df['type'] == 'Job'])
     stats['internships'] = len(df[df['type'] == 'Internship'])
 
@@ -123,7 +131,7 @@ def get_stats():
     for platform, group in df.groupby('platform'):
         total = len(group)
         responses = len(group[group['status'].isin(
-            ['Interview Scheduled', 'Interviewed', 'Offer']
+            ['Interview', 'Interview Scheduled', 'Interviewed', 'Offer']
         )])
         response_rates.append((platform, total, responses))
     stats['response_rates'] = response_rates
@@ -518,3 +526,84 @@ def get_email_log(log_id):
         return resp.data
     except Exception:
         return None
+
+
+# ===================== NOTIFICATION FUNCTIONS =====================
+
+def init_notifications_table():
+    """Create the notifications table if it doesn't exist."""
+    try:
+        db = _get_client()
+        db.rpc("exec_sql", {
+            "query": """
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id BIGSERIAL PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    body TEXT NOT NULL,
+                    type TEXT NOT NULL DEFAULT 'job_alert',
+                    metadata JSONB DEFAULT '{}',
+                    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                CREATE INDEX IF NOT EXISTS idx_notifications_is_read
+                    ON notifications(is_read);
+                CREATE INDEX IF NOT EXISTS idx_notifications_created_at
+                    ON notifications(created_at DESC);
+            """
+        }).execute()
+    except Exception as e:
+        # Table may already exist or RPC not available — that's fine
+        print(f"  Note: init_notifications_table: {e}")
+
+
+def save_notification(title, body, notification_type="job_alert", metadata=None):
+    """Save an in-app notification to Supabase."""
+    db = _get_client()
+    import json
+    try:
+        db.table("notifications").insert({
+            "title": title,
+            "body": body,
+            "type": notification_type,
+            "metadata": json.dumps(metadata or {}),
+        }).execute()
+    except Exception as e:
+        print(f"Failed to save notification: {e}")
+
+
+def get_notifications(unread_only=False, limit=50):
+    """Get notifications, newest first."""
+    try:
+        db = _get_client()
+        query = db.table("notifications").select("*")
+        if unread_only:
+            query = query.eq("is_read", False)
+        resp = query.order("created_at", desc=True).limit(limit).execute()
+        return resp.data or []
+    except Exception:
+        return []
+
+
+def get_unread_count():
+    """Get count of unread notifications."""
+    try:
+        db = _get_client()
+        resp = (db.table("notifications")
+                .select("id", count="exact")
+                .eq("is_read", False)
+                .execute())
+        return resp.count or 0
+    except Exception:
+        return 0
+
+
+def mark_notification_read(notification_id):
+    """Mark a single notification as read."""
+    db = _get_client()
+    db.table("notifications").update({"is_read": True}).eq("id", notification_id).execute()
+
+
+def mark_all_notifications_read():
+    """Mark all notifications as read."""
+    db = _get_client()
+    db.table("notifications").update({"is_read": True}).eq("is_read", False).execute()

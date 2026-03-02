@@ -1,7 +1,7 @@
 """
 JD Analyzer — NOC compatibility check, skill match scoring, red flag detection,
 ATS resume compatibility check.
-Used both in the Streamlit UI (full analysis) and in nightly.py (quick verdict).
+Used both in the Streamlit UI (full analysis) and in hourly.py (quick verdict).
 """
 
 import re
@@ -354,7 +354,7 @@ def ats_check(resume_text, jd_text):
 
 
 def quick_ats(jd_text, resume_text=None):
-    """Quick ATS score for nightly.py. Returns int 0-100."""
+    """Quick ATS score for hourly.py. Returns int 0-100."""
     if resume_text is None:
         resume_text = _get_default_resume_text()
     return ats_check(resume_text, jd_text)["ats_score"]

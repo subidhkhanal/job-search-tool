@@ -78,7 +78,6 @@ import {
   Pencil,
   MessageSquare,
   Mail,
-  StickyNote,
   Check,
   X as XIcon,
 } from "lucide-react";
@@ -157,7 +156,6 @@ export default function TrackerPage() {
     job_type: "Job",
     platform: "LinkedIn",
     url: "",
-    noc_compatible: "Unknown",
     conversion: "N/A",
     salary: "",
     notes: "",
@@ -283,7 +281,6 @@ export default function TrackerPage() {
         job_type: addForm.job_type,
         platform: addForm.platform,
         url: addForm.url.trim() || undefined,
-        noc_compatible: addForm.noc_compatible,
         conversion: addForm.conversion,
         salary: addForm.salary.trim() || undefined,
         notes: addForm.notes.trim() || undefined,
@@ -295,7 +292,6 @@ export default function TrackerPage() {
         job_type: "Job",
         platform: "LinkedIn",
         url: "",
-        noc_compatible: "Unknown",
         conversion: "N/A",
         salary: "",
         notes: "",
@@ -411,271 +407,207 @@ export default function TrackerPage() {
       </div>
 
       {/* ================================================================== */}
-      {/* Section 1: Add New Application (Collapsible)                       */}
+      {/* Toolbar: Add button + Filters (compact row)                       */}
       {/* ================================================================== */}
-      <Card>
-        <Collapsible open={addOpen} onOpenChange={setAddOpen}>
-          <CardHeader className="pb-3">
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="ghost"
-                className="flex w-full items-center justify-between px-0 hover:bg-transparent"
-              >
-                <span className="flex items-center gap-2 text-lg font-semibold">
-                  <Plus className="h-5 w-5" />
-                  Add New Application
-                </span>
-                <ChevronDown
-                  className={cn(
-                    "h-5 w-5 transition-transform",
-                    addOpen && "rotate-180"
-                  )}
+      <div className="flex flex-wrap items-end gap-3">
+        {/* Add Application Dialog */}
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Application
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Log New Application</DialogTitle>
+              <DialogDescription>
+                Fill in the details of your job application.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="app-company">Company *</Label>
+                <Input
+                  id="app-company"
+                  placeholder="e.g. Shopify"
+                  value={addForm.company}
+                  onChange={(e) =>
+                    setAddForm((p) => ({ ...p, company: e.target.value }))
+                  }
                 />
-              </Button>
-            </CollapsibleTrigger>
-          </CardHeader>
-
-          <CollapsibleContent>
-            <CardContent className="pt-0">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Company */}
-                <div className="space-y-2">
-                  <Label htmlFor="app-company">Company *</Label>
-                  <Input
-                    id="app-company"
-                    placeholder="e.g. Shopify"
-                    value={addForm.company}
-                    onChange={(e) =>
-                      setAddForm((p) => ({ ...p, company: e.target.value }))
-                    }
-                  />
-                </div>
-
-                {/* Role */}
-                <div className="space-y-2">
-                  <Label htmlFor="app-role">Role *</Label>
-                  <Input
-                    id="app-role"
-                    placeholder="e.g. Full-Stack Developer"
-                    value={addForm.role}
-                    onChange={(e) =>
-                      setAddForm((p) => ({ ...p, role: e.target.value }))
-                    }
-                  />
-                </div>
-
-                {/* Type */}
-                <div className="space-y-2">
-                  <Label>Type</Label>
-                  <Select
-                    value={addForm.job_type}
-                    onValueChange={(v) =>
-                      setAddForm((p) => ({ ...p, job_type: v }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Job">Job</SelectItem>
-                      <SelectItem value="Internship">Internship</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Platform */}
-                <div className="space-y-2">
-                  <Label>Platform</Label>
-                  <Select
-                    value={addForm.platform}
-                    onValueChange={(v) =>
-                      setAddForm((p) => ({ ...p, platform: v }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PLATFORMS.map((p) => (
-                        <SelectItem key={p} value={p}>
-                          {p}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* URL */}
-                <div className="space-y-2">
-                  <Label htmlFor="app-url">URL</Label>
-                  <Input
-                    id="app-url"
-                    placeholder="https://..."
-                    value={addForm.url}
-                    onChange={(e) =>
-                      setAddForm((p) => ({ ...p, url: e.target.value }))
-                    }
-                  />
-                </div>
-
-                {/* NOC Compatible */}
-                <div className="space-y-2">
-                  <Label>NOC Compatible</Label>
-                  <Select
-                    value={addForm.noc_compatible}
-                    onValueChange={(v) =>
-                      setAddForm((p) => ({ ...p, noc_compatible: v }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Yes">Yes</SelectItem>
-                      <SelectItem value="No">No</SelectItem>
-                      <SelectItem value="Unknown">Unknown</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Conversion Potential */}
-                <div className="space-y-2">
-                  <Label>Conversion Potential</Label>
-                  <Select
-                    value={addForm.conversion}
-                    onValueChange={(v) =>
-                      setAddForm((p) => ({ ...p, conversion: v }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="N/A">N/A</SelectItem>
-                      <SelectItem value="Likely">Likely</SelectItem>
-                      <SelectItem value="Unlikely">Unlikely</SelectItem>
-                      <SelectItem value="Unknown">Unknown</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Salary */}
-                <div className="space-y-2">
-                  <Label htmlFor="app-salary">Salary</Label>
-                  <Input
-                    id="app-salary"
-                    placeholder="e.g. $80,000"
-                    value={addForm.salary}
-                    onChange={(e) =>
-                      setAddForm((p) => ({ ...p, salary: e.target.value }))
-                    }
-                  />
-                </div>
-
-                {/* Notes */}
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="app-notes">Notes</Label>
-                  <Textarea
-                    id="app-notes"
-                    placeholder="Any additional notes..."
-                    value={addForm.notes}
-                    onChange={(e) =>
-                      setAddForm((p) => ({ ...p, notes: e.target.value }))
-                    }
-                  />
-                </div>
-
-                {/* Submit */}
-                <div className="md:col-span-2">
-                  <Button
-                    onClick={handleAddApplication}
-                    disabled={
-                      addLoading ||
-                      !addForm.company.trim() ||
-                      !addForm.role.trim()
-                    }
-                    className="w-full"
-                  >
-                    {addLoading ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Plus className="mr-2 h-4 w-4" />
-                    )}
-                    {addLoading ? "Logging..." : "Log Application"}
-                  </Button>
-                </div>
               </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Collapsible>
-      </Card>
+              <div className="space-y-2">
+                <Label htmlFor="app-role">Role *</Label>
+                <Input
+                  id="app-role"
+                  placeholder="e.g. Full-Stack Developer"
+                  value={addForm.role}
+                  onChange={(e) =>
+                    setAddForm((p) => ({ ...p, role: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Type</Label>
+                <Select
+                  value={addForm.job_type}
+                  onValueChange={(v) =>
+                    setAddForm((p) => ({ ...p, job_type: v }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Job">Job</SelectItem>
+                    <SelectItem value="Internship">Internship</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Platform</Label>
+                <Select
+                  value={addForm.platform}
+                  onValueChange={(v) =>
+                    setAddForm((p) => ({ ...p, platform: v }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PLATFORMS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="app-url">URL</Label>
+                <Input
+                  id="app-url"
+                  placeholder="https://..."
+                  value={addForm.url}
+                  onChange={(e) =>
+                    setAddForm((p) => ({ ...p, url: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Conversion Potential</Label>
+                <Select
+                  value={addForm.conversion}
+                  onValueChange={(v) =>
+                    setAddForm((p) => ({ ...p, conversion: v }))
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="N/A">N/A</SelectItem>
+                    <SelectItem value="Likely">Likely</SelectItem>
+                    <SelectItem value="Unlikely">Unlikely</SelectItem>
+                    <SelectItem value="Unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="app-salary">Salary</Label>
+                <Input
+                  id="app-salary"
+                  placeholder="e.g. $80,000"
+                  value={addForm.salary}
+                  onChange={(e) =>
+                    setAddForm((p) => ({ ...p, salary: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="app-notes">Notes</Label>
+                <Textarea
+                  id="app-notes"
+                  placeholder="Any additional notes..."
+                  value={addForm.notes}
+                  onChange={(e) =>
+                    setAddForm((p) => ({ ...p, notes: e.target.value }))
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={handleAddApplication}
+                disabled={
+                  addLoading ||
+                  !addForm.company.trim() ||
+                  !addForm.role.trim()
+                }
+                className="w-full"
+              >
+                {addLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="mr-2 h-4 w-4" />
+                )}
+                {addLoading ? "Logging..." : "Log Application"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* ================================================================== */}
-      {/* Section 2: Filters                                                 */}
-      {/* ================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Filter by Status */}
-        <div className="space-y-2">
-          <Label>Filter by Status</Label>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Compact Filters */}
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">All Statuses</SelectItem>
+            {STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        {/* Filter by Type */}
-        <div className="space-y-2">
-          <Label>Filter by Type</Label>
-          <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All</SelectItem>
-              <SelectItem value="Job">Job</SelectItem>
-              <SelectItem value="Internship">Internship</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-[130px]">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">All Types</SelectItem>
+            <SelectItem value="Job">Job</SelectItem>
+            <SelectItem value="Internship">Internship</SelectItem>
+          </SelectContent>
+        </Select>
 
-        {/* Filter by Platform */}
-        <div className="space-y-2">
-          <Label>Filter by Platform</Label>
-          <Select value={filterPlatform} onValueChange={setFilterPlatform}>
-            <SelectTrigger className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="All">All</SelectItem>
-              {PLATFORMS.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Select value={filterPlatform} onValueChange={setFilterPlatform}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="Platform" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">All Platforms</SelectItem>
+            {PLATFORMS.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <span className="text-muted-foreground text-sm ml-auto">
+          {applications.length} application{applications.length !== 1 && "s"}
+        </span>
       </div>
 
       {/* ================================================================== */}
-      {/* Section 3: Applications List                                       */}
+      {/* Applications List                                                  */}
       {/* ================================================================== */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">
-          Applications{" "}
-          <span className="text-muted-foreground font-normal text-base">
-            ({applications.length})
-          </span>
-        </h2>
+      <div className="space-y-3">
 
         {appsLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -832,10 +764,6 @@ export default function TrackerPage() {
                             </a>
                           </div>
                         )}
-                        <div>
-                          <p className="text-muted-foreground">NOC</p>
-                          <p className="font-medium">{app.noc_compatible}</p>
-                        </div>
                         <div>
                           <p className="text-muted-foreground">Conversion</p>
                           <p className="font-medium">{app.conversion}</p>

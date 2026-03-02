@@ -17,7 +17,7 @@ echo ""
 
 # Test module imports
 echo "Testing module imports..."
-cd backend/modules && python -c "from nightly import score_job; print('Module imports OK')" && cd ../..
+cd backend/modules && python -c "from hourly import score_job; print('Module imports OK')" && cd ../..
 echo ""
 
 # Check for API keys
