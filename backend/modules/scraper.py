@@ -139,15 +139,35 @@ def scrape_remotive():
 
     return jobs
 
-HN_THREAD_ID = "46857488"
+HN_THREAD_ID_FALLBACK = "46857488"
+
+
+def _get_latest_hn_thread_id():
+    """Auto-discover the latest 'Who is hiring?' thread from the whoishiring bot."""
+    try:
+        resp = requests.get(
+            "https://hn.algolia.com/api/v1/search_by_date",
+            params={
+                "query": '"Who is hiring"',
+                "tags": "ask_hn,author_whoishiring",
+                "hitsPerPage": 1,
+            },
+            timeout=10,
+        )
+        hits = resp.json().get("hits", [])
+        if hits:
+            return hits[0]["objectID"]
+    except Exception as e:
+        print(f"  HN thread auto-discovery failed: {e}")
+    return HN_THREAD_ID_FALLBACK
 
 
 def scrape_hn_who_is_hiring():
     """Scrape HackerNews 'Who is hiring?' thread - free HN API."""
     jobs = []
     try:
-        # Use the known thread ID directly
-        story_id = HN_THREAD_ID
+        story_id = _get_latest_hn_thread_id()
+        print(f"  HN thread ID: {story_id}")
         comments_url = f"https://hn.algolia.com/api/v1/search?tags=comment,story_{story_id}&hitsPerPage=200"
         resp = _get_with_retry(comments_url)
         comments = resp.json().get("hits", [])
@@ -159,36 +179,30 @@ def scrape_hn_who_is_hiring():
 
             text_clean = BeautifulSoup(text, "html.parser").get_text()
 
-            # Check if it matches internship + allowed location
+            # Check if it matches internship keywords (no location filter for HN — global board)
             if not is_internship(text_clean):
                 continue
-            if not is_allowed_location(text_clean):
-                continue
-
-            # Check if India-friendly (remote or India mentioned)
-            is_india_friendly = any(kw in text_clean.lower() for kw in INDIA_KEYWORDS)
 
             # Extract company and role from first line
             # HN format is usually: "Company | Role | Location | Type"
             first_line = text_clean.split("\n")[0].strip()
+
+            # Skip non-job comments (replies, job seekers) — real posts use pipe format
+            if "|" not in first_line:
+                continue
+
             parts = [p.strip() for p in first_line.split("|")]
 
             if len(parts) >= 3:
                 company = parts[0][:50]
                 title = parts[1][:80]
-                hn_location = parts[2][:50] if len(parts) > 2 else ""
-            elif len(parts) == 2:
+                hn_location = parts[2][:50]
+            else:
                 company = parts[0][:50]
                 title = parts[1][:80]
                 hn_location = ""
-            else:
-                company = first_line[:50]
-                title = first_line[:80]
-                hn_location = ""
 
             location = hn_location if hn_location else "Remote/Various"
-            if is_india_friendly and "india" not in location.lower():
-                location += " (India mentioned)"
 
             job_data = {
                 "title": title,
@@ -264,7 +278,6 @@ def scrape_jobspy():
                 hours_old=72,
                 country_indeed="India",
                 job_type="internship",
-                linkedin_fetch_description=True,
             )
 
             for _, row in results.iterrows():
@@ -287,7 +300,7 @@ def scrape_jobspy():
 
                 job_data = {
                     "title": title[:150],
-                    "company": str(row.get("company_name", "Unknown"))[:80],
+                    "company": str(row.get("company", "Unknown"))[:80],
                     "location": location[:80] or "Remote",
                     "source": f"JobSpy/{row.get('site', 'unknown')}",
                     "url": url,
@@ -376,19 +389,23 @@ def scrape_developersindia():
 def scrape_internshala():
     """Scrape Internshala for AI/ML internships."""
     jobs = []
+    seen_urls = set()
     urls = [
         "https://internshala.com/internships/work-from-home-artificial-intelligence-internship",
         "https://internshala.com/internships/work-from-home-machine-learning-internship",
+        "https://internshala.com/internships/work-from-home-data-science-internship",
+        "https://internshala.com/internships/work-from-home-python-internship",
     ]
     try:
         for page_url in urls:
             resp = _get_with_retry(page_url, headers={"User-Agent": "Mozilla/5.0"})
             soup = BeautifulSoup(resp.text, "html.parser")
 
-            for card in soup.select(".individual_internship, .internship_meta, .internship-heading-container")[:20]:
-                title_el = card.select_one("h3, .heading_4_5, .profile a, a.view_detail_button")
-                company_el = card.select_one(".company_name, h4, .heading_6")
-                location_el = card.select_one(".location_link, #location_names span")
+            for card in soup.select(".individual_internship"):
+                title_el = card.select_one("h3.job-internship-name")
+                company_el = card.select_one(".company-name")
+                location_el = card.select_one(".locations")
+                link_el = card.select_one(".company a[href]")
 
                 if not title_el:
                     continue
@@ -396,9 +413,18 @@ def scrape_internshala():
                 title = title_el.get_text(strip=True)
                 company = company_el.get_text(strip=True) if company_el else "Unknown"
                 location = location_el.get_text(strip=True) if location_el else "India"
-                link = title_el.get("href", "")
+                link = link_el.get("href", "") if link_el else ""
                 if link and not link.startswith("http"):
                     link = f"https://internshala.com{link}"
+
+                if link in seen_urls:
+                    continue
+                if link:
+                    seen_urls.add(link)
+
+                skills = " ".join(
+                    s.get_text(strip=True) for s in card.select(".skill_container")
+                )
 
                 job_data = {
                     "title": title[:150],
@@ -406,7 +432,7 @@ def scrape_internshala():
                     "location": location[:80],
                     "source": "Internshala",
                     "url": link,
-                    "description": f"Internship: {title}",
+                    "description": f"Internship: {title} | Skills: {skills}"[:500],
                 }
                 jobs.append(job_data)
             time.sleep(2)
