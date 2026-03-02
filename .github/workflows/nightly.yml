@@ -32,4 +32,7 @@ jobs:
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_CLAIM_EMAIL: ${{ secrets.VAPID_CLAIM_EMAIL }}
+          WELLFOUND_SESSION: ${{ secrets.WELLFOUND_SESSION }}
+          WELLFOUND_CF: ${{ secrets.WELLFOUND_CF }}
+          WELLFOUND_DATADOME: ${{ secrets.WELLFOUND_DATADOME }}
         run: cd backend/modules && python hourly.py

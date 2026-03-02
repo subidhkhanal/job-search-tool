@@ -866,7 +866,7 @@ def scrape_unstop():
                 if isinstance(location, list):
                     location = ", ".join(location[:3])
                 slug = opp.get("public_url", "") or opp.get("slug", "")
-                url = f"https://unstop.com/internships/{slug}" if slug and not slug.startswith("http") else (slug or "")
+                url = f"https://unstop.com/{slug}" if slug and not slug.startswith("http") else (slug or "")
 
                 combined = title + " " + company + " " + str(location)
                 if not is_internship(combined):
