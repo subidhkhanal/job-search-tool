@@ -2,12 +2,14 @@
 
 import { useAuth } from "@/context/auth-context";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
+import { cn } from "@/lib/utils";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -19,8 +21,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar />
-      <main className="md:ml-60">
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+      <main className={cn("transition-all duration-300", collapsed ? "md:ml-16" : "md:ml-60")}>
         <div className="mx-auto max-w-7xl p-6 pt-16 md:pt-6">{children}</div>
       </main>
     </div>
