@@ -236,7 +236,7 @@ def scrape_arbeitnow():
 
 
 def scrape_jobspy():
-    """Scrape multiple job boards via JobSpy (Indeed, Google, Glassdoor, LinkedIn, Naukri)."""
+    """Scrape multiple job boards via JobSpy (Indeed, Google, Glassdoor, LinkedIn)."""
     jobs = []
     try:
         from jobspy import scrape_jobs
@@ -257,7 +257,7 @@ def scrape_jobspy():
     for query in search_queries:
         try:
             results = scrape_jobs(
-                site_name=["indeed", "google", "glassdoor", "linkedin", "naukri"],
+                site_name=["indeed", "google", "glassdoor", "linkedin"],
                 search_term=query,
                 location="India",
                 results_wanted=15,
@@ -280,6 +280,8 @@ def scrape_jobspy():
                 location = str(row.get("location", ""))
                 combined = title + " " + desc[:500] + " " + location
 
+                if not is_internship(combined):
+                    continue
                 if not is_allowed_location(combined):
                     continue
 
@@ -699,140 +701,6 @@ def scrape_simplify_internships():
     return jobs
 
 
-def scrape_wellfound_graphql():
-    """Scrape Wellfound via internal GraphQL API. Requires browser cookies."""
-    import os
-    import json
-
-    session_cookie = os.environ.get("WELLFOUND_SESSION", "")
-    cf_cookie = os.environ.get("WELLFOUND_CF", "")
-    dd_cookie = os.environ.get("WELLFOUND_DATADOME", "")
-
-    if not session_cookie or not cf_cookie:
-        print("Wellfound: Missing cookies (WELLFOUND_SESSION, WELLFOUND_CF) — skipping.")
-        return []
-
-    jobs = []
-    headers = {
-        "Accept": "*/*",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Apollographql-Client-Name": "talent-web",
-        "Content-Type": "application/json",
-        "Origin": "https://wellfound.com",
-        "Referer": "https://wellfound.com/jobs",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "X-Apollo-Operation-Name": "JobSearchResultsX",
-        "X-Requested-With": "XMLHttpRequest",
-    }
-    cookies = {
-        "logged_in": "true",
-        "_wellfound": session_cookie,
-        "cf_clearance": cf_cookie,
-        "datadome": dd_cookie,
-    }
-
-    search_keywords = [
-        ["AI intern", "ML intern", "LLM"],
-        ["machine learning intern", "gen ai intern"],
-    ]
-
-    try:
-        for kw_batch in search_keywords:
-            for page in range(1, 4):
-                payload = {
-                    "operationName": "JobSearchResultsX",
-                    "variables": {
-                        "filterConfigurationInput": {
-                            "page": page,
-                            "customJobTitles": kw_batch,
-                            "remotePreference": "REMOTE_OPEN",
-                            "jobTypes": ["internship"],
-                            "equity": {"min": None, "max": None},
-                            "salary": {"min": None, "max": None},
-                            "yearsExperience": {"min": None, "max": 2},
-                        }
-                    },
-                    "extensions": {
-                        "operationId": "tfe/2aeb9d7cc572a94adfe2b888b32e64eb8b7fb77215b168ba4256b08f9a94f37b"
-                    }
-                }
-
-                resp = requests.post(
-                    "https://wellfound.com/graphql",
-                    json=payload,
-                    headers=headers,
-                    cookies=cookies,
-                    timeout=15,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-                edges = data.get("data", {}).get("talent", {}).get(
-                    "jobSearchResults", {}).get("startups", {}).get("edges", [])
-
-                for edge in edges:
-                    node = edge.get("node", {})
-                    typename = node.get("__typename", "")
-
-                    # Normalize company node based on type
-                    if typename == "StartupSearchResult":
-                        company_node = node
-                    elif typename == "PromotedResult":
-                        company_node = node.get("promotedStartup", node)
-                    else:
-                        continue
-
-                    company_name = company_node.get("name", "Unknown")
-                    company_slug = company_node.get("slug", "")
-                    locations = [loc.get("displayName", "")
-                                 for loc in company_node.get("locationTaggings", [])]
-
-                    for jl in company_node.get("highlightedJobListings", []):
-                        jl_title = jl.get("title", "")
-                        jl_id = jl.get("id", "")
-                        jl_slug = jl.get("slug", "")
-                        jl_locations = jl.get("locationNames", [])
-                        jl_desc = (jl.get("description", "") or "")[:500]
-
-                        if jl.get("remote"):
-                            location = "Remote"
-                            if jl_locations:
-                                location += f" ({', '.join(jl_locations[:3])})"
-                        elif jl_locations:
-                            location = ", ".join(jl_locations[:3])
-                        elif locations:
-                            location = ", ".join(locations[:3])
-                        else:
-                            location = "Unknown"
-
-                        combined = jl_title + " " + jl_desc[:300] + " " + location
-                        if not is_allowed_location(combined):
-                            continue
-
-                        url = f"https://wellfound.com/company/{company_slug}/jobs/{jl_id}-{jl_slug}" if company_slug and jl_slug else "https://wellfound.com/jobs"
-
-                        job_data = {
-                            "title": jl_title[:150],
-                            "company": company_name[:80],
-                            "location": location[:80],
-                            "source": "Wellfound",
-                            "url": url,
-                            "description": BeautifulSoup(jl_desc, "html.parser").get_text()[:500],
-                        }
-                        jobs.append(job_data)
-
-                has_next = data.get("data", {}).get("talent", {}).get(
-                    "jobSearchResults", {}).get("hasNextPage", False)
-                if not has_next:
-                    break
-                time.sleep(3)
-
-            time.sleep(2)
-    except Exception as e:
-        print(f"Wellfound GraphQL error: {e}")
-    return jobs
-
-
 def scrape_unstop():
     """Scrape Unstop (D2C) internships via their search API."""
     jobs = []
@@ -988,7 +856,7 @@ def run_all_scrapers():
         ("HN Who's Hiring", scrape_hn_who_is_hiring),
         ("Arbeitnow", scrape_arbeitnow),
         ("LinkedIn Guest", scrape_linkedin_guest),
-        ("JobSpy (Indeed/Google/Glassdoor/LinkedIn/Naukri)", scrape_jobspy),
+        ("JobSpy (Indeed/Google/Glassdoor/LinkedIn)", scrape_jobspy),
         ("HasJob", scrape_hasjob),
         ("developersIndia", scrape_developersindia),
         ("Internshala", scrape_internshala),
@@ -998,7 +866,6 @@ def run_all_scrapers():
         ("The Muse", scrape_themuse),
         ("Jooble", scrape_jooble),
         ("SimplifyJobs", scrape_simplify_internships),
-        ("Wellfound", scrape_wellfound_graphql),
         ("Unstop", scrape_unstop),
     ]
 
