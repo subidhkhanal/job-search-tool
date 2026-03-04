@@ -109,6 +109,7 @@ const STATUSES = [
   "Offer",
   "Rejected",
   "Ghosted",
+  "Not Interested",
 ] as const;
 
 const STATUS_COLORS: Record<string, string> = {
@@ -118,6 +119,7 @@ const STATUS_COLORS: Record<string, string> = {
   Offer: "bg-purple-500/15 text-purple-400 border-purple-500/30",
   Rejected: "bg-red-500/15 text-red-400 border-red-500/30",
   Ghosted: "bg-gray-500/15 text-gray-400 border-gray-500/30",
+  "Not Interested": "bg-orange-500/15 text-orange-400 border-orange-500/30",
 };
 
 const DEMO_STATUSES = ["Idea", "Building", "Deployed", "Shipped"] as const;
