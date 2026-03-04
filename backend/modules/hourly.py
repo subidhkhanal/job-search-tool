@@ -9,7 +9,7 @@ from datetime import datetime
 from tracker import (
     init_db, save_scraped_job, save_email_log, get_existing_job_urls,
     save_notification, init_notifications_table,
-    send_push_notifications,
+    send_push_notifications, get_scraped_jobs,
 )
 from scraper import run_all_scrapers
 from send_email import build_email_content, send_email, get_alert_number
@@ -207,10 +207,23 @@ def main():
         print("Done!")
         return
 
-    # Build email content with only new jobs
+    # Re-fetch from DB using same filter as Tonight's Plan (dismissed=0, applied=0)
+    new_urls = {j.get("url", "") for j in new_jobs}
+    open_jobs_df = get_scraped_jobs()
+    if not open_jobs_df.empty:
+        email_jobs = open_jobs_df[open_jobs_df["url"].isin(new_urls)].to_dict("records")
+    else:
+        email_jobs = []
+
+    if not email_jobs:
+        print("\nNo open new jobs to email (all may have been dismissed/applied). Skipping email.")
+        print("Done!")
+        return
+
+    # Build email content with open new jobs (same source as Tonight's Plan)
     print("\nBuilding email content...")
     alert_number = get_alert_number()
-    md_content = build_email_content(new_jobs, sources_status, sources_errors)
+    md_content = build_email_content(email_jobs, sources_status, sources_errors)
 
     # Send email
     print(f"Sending Job Alert #{alert_number}...")
