@@ -783,94 +783,6 @@ def scrape_unstop():
     return jobs
 
 
-def scrape_linkedin_guest():
-    """Scrape LinkedIn public guest jobs API — no login required.
-    Uses linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search endpoint."""
-    jobs = []
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-    }
-
-    search_queries = [
-        "internship remote",
-        "intern remote",
-        "software internship",
-        "data science internship",
-    ]
-
-    seen_urls = set()
-
-    try:
-        for query in search_queries:
-            for start in range(0, 50, 25):
-                url = (
-                    f"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
-                    f"?keywords={quote_plus(query)}"
-                    f"&location=India"
-                    f"&f_TP=1%2C2"
-                    f"&f_JT=I"
-                    f"&start={start}"
-                )
-
-                try:
-                    resp = requests.get(url, headers=headers, timeout=15)
-                    if resp.status_code == 429:
-                        print(f"  LinkedIn rate-limited at start={start}, moving on.")
-                        break
-                    if resp.status_code != 200:
-                        continue
-
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    cards = soup.select("div.base-card, li.result-card, div.job-search-card")
-
-                    for card in cards:
-                        title_el = card.select_one("h3.base-search-card__title, h3.result-card__title")
-                        company_el = card.select_one("h4.base-search-card__subtitle, h4.result-card__subtitle")
-                        location_el = card.select_one("span.job-search-card__location")
-                        link_el = card.select_one("a.base-card__full-link, a.result-card__full-link")
-
-                        if not title_el or not link_el:
-                            continue
-
-                        title = title_el.get_text(strip=True)
-                        company = company_el.get_text(strip=True) if company_el else "Unknown"
-                        location = location_el.get_text(strip=True) if location_el else "India"
-                        job_url = link_el.get("href", "").split("?")[0]
-
-                        if not job_url or job_url in seen_urls:
-                            continue
-                        seen_urls.add(job_url)
-
-                        combined = title + " " + company + " " + location
-                        if not is_allowed_location(combined):
-                            continue
-
-                        job_data = {
-                            "title": title[:150],
-                            "company": company[:80],
-                            "location": location[:80],
-                            "source": "LinkedIn",
-                            "url": job_url,
-                            "description": f"Internship: {title} at {company}",
-                        }
-                        jobs.append(job_data)
-
-                except requests.RequestException:
-                    continue
-
-                time.sleep(2)
-            time.sleep(3)
-    except Exception as e:
-        print(f"LinkedIn Guest error: {e}")
-    return jobs
-
-
 def run_all_scrapers():
     """Run all automated scrapers and return combined results with error tracking."""
     all_jobs = []
@@ -881,7 +793,6 @@ def run_all_scrapers():
         ("Remotive", scrape_remotive),
         ("HN Who's Hiring", scrape_hn_who_is_hiring),
         ("Arbeitnow", scrape_arbeitnow),
-        ("LinkedIn Guest", scrape_linkedin_guest),
         ("JobSpy (Indeed/Google/Glassdoor/LinkedIn)", scrape_jobspy),
         ("HasJob", scrape_hasjob),
         ("developersIndia", scrape_developersindia),
