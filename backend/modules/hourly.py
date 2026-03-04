@@ -5,7 +5,6 @@ Designed to run both locally and in GitHub Actions.
 """
 
 import os
-import json
 from datetime import datetime
 from tracker import (
     init_db, save_scraped_job, save_email_log, get_existing_job_urls,
@@ -121,104 +120,6 @@ def score_job(job):
     return score
 
 
-def llm_rerank_jobs(jobs, top_n=20):
-    """
-    Use Groq LLM to re-rank the top N keyword-scored jobs.
-    Returns the same list with 'score' and 'llm_reason' fields updated.
-    Falls back gracefully if GROQ_API_KEY is missing or API fails.
-    """
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        print("GROQ_API_KEY not set — skipping LLM re-ranking.")
-        return jobs
-
-    try:
-        from groq import Groq
-    except ImportError:
-        print("groq package not available — skipping LLM re-ranking.")
-        return jobs
-
-    candidates = jobs[:top_n]
-    rest = jobs[top_n:]
-
-    # Build a compact job list for the prompt
-    job_list_text = ""
-    for i, j in enumerate(candidates, 1):
-        job_list_text += (
-            f"\n[{i}] Title: {j.get('title', '')[:80]}\n"
-            f"    Company: {j.get('company', '')[:40]}\n"
-            f"    Location: {j.get('location', '')[:40]}\n"
-            f"    Description: {j.get('description', '')[:300]}\n"
-        )
-
-    # Build candidate description from profile or use default
-    try:
-        from profile import get_profile_text
-        candidate_desc = get_profile_text()
-    except Exception:
-        candidate_desc = None
-    if not candidate_desc:
-        candidate_desc = (
-            "- M.Tech AI student, graduating March 2026, based in Noida (Delhi NCR)\n"
-            "- Skills: Python, LangChain, RAG pipelines, FastAPI, ChromaDB, agentic AI, web scraping, automation\n"
-            "- Preference: AI/ML roles, onsite or hybrid in Delhi NCR; open to remote\n"
-            "- Acceptable: intern, fresher, junior, entry-level, 0-2 years experience"
-        )
-
-    prompt = f"""You are a strict job relevance scorer. Rate each job for this candidate:
-{candidate_desc}
-
-SCORING RULES — follow strictly:
-- Score 0: Role title has nothing to do with tech/engineering/AI/ML/data/software (e.g., "Marketing Student", "Sales Rep", "Account Manager", "HR Coordinator")
-- Score 0: Requires 5+ years experience, senior/lead/principal level, or clearance/visa restrictions
-- Score 0: Non-English job postings
-- Score 1-25: Tech role but wrong specialization or poor location match
-- Score 26-50: Relevant tech role, some skill overlap, acceptable location
-- Score 51-75: Strong match — AI/ML/Python role, good skill overlap
-- Score 76-100: Near-perfect — AI/ML role in Delhi NCR, exact stack match, entry-level friendly
-
-For each job, provide:
-1. A relevance score from 0-100
-2. A one-line reason (max 10 words)
-
-Jobs to score:
-{job_list_text}
-
-Respond ONLY in this JSON format:
-{{"rankings": [{{"id": 1, "score": 85, "reason": "RAG + LangChain match, NCR location"}}, ...]}}"""
-
-    try:
-        client = Groq(api_key=groq_key)
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=1500,
-        )
-        raw = response.choices[0].message.content.strip()
-        # Strip markdown code blocks if present
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        data = json.loads(raw)
-
-        ranking_map = {r["id"]: r for r in data.get("rankings", [])}
-        for i, job in enumerate(candidates, 1):
-            if i in ranking_map:
-                r = ranking_map[i]
-                job["score"] = r["score"]
-                job["llm_reason"] = r.get("reason", "")
-
-        candidates.sort(key=lambda j: j.get("score", 0), reverse=True)
-        print(f"LLM re-ranking complete for {len(candidates)} jobs.")
-
-    except Exception as e:
-        print(f"LLM re-ranking failed: {e} — using keyword scores.")
-
-    return candidates + rest
-
-
 def main():
     print("=== Hourly Job Search Automation ===")
     print(f"Running at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -250,10 +151,19 @@ def main():
     new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
     new_jobs.sort(key=lambda j: j["score"], reverse=True)
 
-    # LLM re-ranking for top candidates
-    if new_jobs:
-        print("\nRunning LLM re-ranking on top candidates...")
-        new_jobs = llm_rerank_jobs(new_jobs, top_n=20)
+    # Health check: if LinkedIn scraper returned 0 results, flag it
+    linkedin_count = sources_status.get("LinkedIn AI/ML", 0)
+    if linkedin_count == 0 and "LinkedIn AI/ML" not in sources_errors:
+        print("\n[HEALTH CHECK FAILED] LinkedIn scraper returned 0 results — possible scraper failure.")
+        try:
+            save_notification(
+                title="Scraper Health Check Failed",
+                body="LinkedIn AI/ML scraper returned 0 results. Possible scraper failure — check logs.",
+                notification_type="health_check",
+                metadata={"source": "LinkedIn AI/ML", "timestamp": datetime.now().isoformat()},
+            )
+        except Exception:
+            pass
 
     # Auto-analyze top jobs for verdict/ATS
     if new_jobs:

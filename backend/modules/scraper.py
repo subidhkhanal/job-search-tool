@@ -1,6 +1,9 @@
 import requests
 from bs4 import BeautifulSoup
 import time
+import random
+import re
+import os
 from datetime import datetime
 from urllib.parse import quote_plus
 
@@ -249,68 +252,236 @@ def scrape_arbeitnow():
     return jobs
 
 
-def scrape_jobspy():
-    """Scrape multiple job boards via JobSpy (Indeed, Google, Glassdoor, LinkedIn)."""
-    jobs = []
+_LINKEDIN_SEARCH_QUERIES = [
+    "gen ai intern",
+    "generative ai intern",
+    "genai intern",
+    "llm engineer intern",
+    "ai engineer intern",
+    "ai developer intern",
+    "machine learning intern",
+    "ml intern",
+    "nlp intern",
+    "prompt engineer intern",
+    "ai automation intern",
+    "deep learning intern",
+    "computer vision intern",
+    "data science intern",
+    "ai research intern",
+    "research intern ai",
+    "ai trainee",
+]
+
+_LINKEDIN_LOCATIONS = ["India", "Remote"]
+
+_TITLE_INCLUDE = [
+    "gen ai", "genai", "generative ai", "llm", "ai engineer", "ai developer",
+    "nlp engineer", "machine learning engineer", "ml intern", "ai/ml",
+    "ai automation", "prompt engineer", "ai research", "research intern",
+    "large language model", "langchain", "rag", "agentic ai",
+    "ai trainee", "deep learning", "computer vision", "data science",
+]
+
+_TITLE_REJECT = [
+    "frontend", "react", "angular", "ui/ux", "devops", "cloud", "data analyst",
+    "content", "marketing", "sales", "hr", "finance", "blockchain",
+]
+
+# Exact phrases score higher than partial keyword matches
+_TITLE_EXACT_PHRASES = [
+    "ai engineer intern", "ml engineer intern", "ai developer intern",
+    "gen ai intern", "generative ai intern", "machine learning intern",
+    "data science intern", "deep learning intern", "nlp intern",
+    "computer vision intern", "ai research intern", "prompt engineer intern",
+    "ai automation intern", "ai trainee", "llm engineer intern",
+]
+
+
+def _load_blacklist():
+    """Load company blacklist from blacklist.txt. Returns a set of lowercase names."""
+    blacklist_path = os.path.join(os.path.dirname(__file__), "..", "..", "blacklist.txt")
+    try:
+        with open(blacklist_path, "r", encoding="utf-8") as f:
+            return {line.strip().lower() for line in f if line.strip()}
+    except FileNotFoundError:
+        return set()
+
+
+def _normalize_for_dedup(text):
+    """Lowercase, strip punctuation, strip 'intern'/'internship' for dedup key."""
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\b(internship|intern)\b", "", text)
+    return " ".join(text.split())
+
+
+def _title_passes_filter(title):
+    """Return True if title passes REJECT/INCLUDE filter. REJECT checked first."""
+    title_lower = title.lower()
+    if any(kw in title_lower for kw in _TITLE_REJECT):
+        return False
+    if any(kw in title_lower for kw in _TITLE_INCLUDE):
+        return True
+    return False
+
+
+def _is_blacklisted(company, blacklist):
+    """Check if company name matches any blacklisted name (substring match)."""
+    if not blacklist:
+        return False
+    company_lower = company.lower()
+    return any(bl in company_lower for bl in blacklist)
+
+
+def _score_linkedin_job(job):
+    """Simple deterministic scoring for a LinkedIn job. Returns 0-100."""
+    score = 0
+    title_lower = job.get("title", "").lower()
+
+    # Exact title phrase match: +40
+    if any(phrase in title_lower for phrase in _TITLE_EXACT_PHRASES):
+        score += 40
+    # Partial keyword match: +20 (only if no exact match)
+    elif any(kw in title_lower for kw in _TITLE_INCLUDE):
+        score += 20
+
+    # Match count bonus: (match_count - 1) * 10, capped at +30
+    match_count = job.get("match_count", 1)
+    score += min((match_count - 1) * 10, 30)
+
+    # Company name present: +5
+    company = job.get("company", "").strip()
+    if company and company != "Unknown":
+        score += 5
+
+    # Location is Remote: +5
+    location = job.get("location", "").lower()
+    if "remote" in location:
+        score += 5
+
+    # Posted date available: +5
+    if job.get("posted_date"):
+        score += 5
+
+    return min(score, 100)
+
+
+def scrape_linkedin():
+    """Scrape LinkedIn via JobSpy for targeted AI/ML internships."""
+    start_time = time.time()
+
     try:
         from jobspy import scrape_jobs
     except ImportError:
-        print("python-jobspy not installed — skipping JobSpy scraper. Run: pip install python-jobspy")
-        return jobs
+        print("python-jobspy not installed — skipping LinkedIn scraper. Run: pip install python-jobspy")
+        return []
 
-    search_queries = [
-        "internship remote",
-        "intern remote India",
-        "software intern remote",
-        "data intern remote India",
-        "engineering internship remote",
-    ]
+    # Build and randomize 34 query+location combos
+    combos = [(q, loc) for q in _LINKEDIN_SEARCH_QUERIES for loc in _LINKEDIN_LOCATIONS]
+    random.shuffle(combos)
 
-    seen_urls = set()
+    blacklist = _load_blacklist()
 
-    for query in search_queries:
+    # Stats
+    total_raw = 0
+    after_title_filter = 0
+    after_blacklist = 0
+    combos_run = 0
+
+    # In-memory dedup: key -> job_data (with match_count)
+    dedup_map = {}
+
+    for query, location in combos:
+        combos_run += 1
         try:
             results = scrape_jobs(
-                site_name=["indeed", "google", "glassdoor", "linkedin"],
+                site_name=["linkedin"],
                 search_term=query,
-                location="India",
-                results_wanted=15,
-                hours_old=72,
-                country_indeed="India",
+                location=location,
                 job_type="internship",
+                hours_old=24,
+                results_wanted=50,
             )
 
             for _, row in results.iterrows():
-                title = str(row.get("title", ""))
-                url = str(row.get("job_url", ""))
+                total_raw += 1
 
-                # Deduplicate across queries
-                if url in seen_urls:
-                    continue
-                seen_urls.add(url)
-
-                desc = str(row.get("description", "") or "")
-                location = str(row.get("location", ""))
-                combined = title + " " + desc[:500] + " " + location
-
-                if not is_internship(combined):
-                    continue
-                if not is_allowed_location(combined):
+                title = str(row.get("title", "")).strip()
+                if not title:
                     continue
 
-                job_data = {
-                    "title": title[:150],
-                    "company": str(row.get("company", "Unknown"))[:80],
-                    "location": location[:80] or "Remote",
-                    "source": f"JobSpy/{row.get('site', 'unknown')}",
-                    "url": url,
-                    "description": desc[:500],
-                }
-                jobs.append(job_data)
+                # Title filter
+                if not _title_passes_filter(title):
+                    continue
+                after_title_filter += 1
 
-            time.sleep(3)  # Pause between queries
+                company = str(row.get("company", "Unknown")).strip() or "Unknown"
+                url = str(row.get("job_url", "")).strip()
+
+                # Blacklist check
+                if _is_blacklisted(company, blacklist):
+                    continue
+                after_blacklist += 1
+
+                job_location = str(row.get("location", "")).strip() or location
+                desc = str(row.get("description", "") or "")[:500]
+                posted_date = str(row.get("date_posted", "") or "") or None
+
+                # In-memory dedup by normalized title + company
+                dedup_key = _normalize_for_dedup(title) + "||" + _normalize_for_dedup(company)
+
+                if dedup_key in dedup_map:
+                    dedup_map[dedup_key]["match_count"] += 1
+                    # Keep the URL with more info (prefer non-empty)
+                    if url and not dedup_map[dedup_key]["url"]:
+                        dedup_map[dedup_key]["url"] = url
+                else:
+                    dedup_map[dedup_key] = {
+                        "title": title[:150],
+                        "company": company[:80],
+                        "location": job_location[:80],
+                        "source": "LinkedIn",
+                        "url": url,
+                        "description": desc,
+                        "posted_date": posted_date,
+                        "source_query": query,
+                        "match_count": 1,
+                        "score": 0,
+                        "scraped_at": datetime.now().isoformat(),
+                    }
+
+            time.sleep(3)
         except Exception as e:
-            print(f"  JobSpy query '{query}' error: {e}")
+            print(f"  LinkedIn query '{query}' ({location}) error: {e}")
+
+    # Convert dedup map to list and score
+    jobs = list(dedup_map.values())
+    for job in jobs:
+        job["score"] = _score_linkedin_job(job)
+    jobs.sort(key=lambda j: j["score"], reverse=True)
+
+    # Print summary
+    elapsed = time.time() - start_time
+    avg_match = sum(j["match_count"] for j in jobs) / len(jobs) if jobs else 0
+    top_score = jobs[0]["score"] if jobs else 0
+    health = "OK" if total_raw > 0 else "FAILED"
+
+    print(f"\n--- LinkedIn Scraper Run Summary ---")
+    print(f"Combinations run: {combos_run}")
+    print(f"Query order: randomized")
+    print(f"Time filter: last 24 hours")
+    print(f"Results per query: up to 50")
+    print(f"Total raw results: {total_raw}")
+    print(f"After title filter: {after_title_filter}")
+    print(f"After blacklist: {after_blacklist}")
+    print(f"After in-memory dedup: {len(jobs)}")
+    print(f"Avg match count: {avg_match:.1f}")
+    print(f"Top score: {top_score}")
+    print(f"Time taken: {elapsed:.0f}s")
+    print(f"Health: {health}")
+
+    if health == "FAILED":
+        print("[HEALTH CHECK FAILED] Zero raw results across all combinations — possible scraper failure.")
 
     return jobs
 
@@ -793,7 +964,7 @@ def run_all_scrapers():
         ("Remotive", scrape_remotive),
         ("HN Who's Hiring", scrape_hn_who_is_hiring),
         ("Arbeitnow", scrape_arbeitnow),
-        ("JobSpy (Indeed/Google/Glassdoor/LinkedIn)", scrape_jobspy),
+        ("LinkedIn AI/ML", scrape_linkedin),
         ("HasJob", scrape_hasjob),
         ("developersIndia", scrape_developersindia),
         ("Internshala", scrape_internshala),
