@@ -9,7 +9,17 @@ import {
   generateThankYou,
   generateReferralRequest,
   generateDemoOutreach,
+  getApplications,
+  updateApplicationStatus,
 } from "@/lib/api";
+import type { Application } from "@/lib/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 import {
   Card,
@@ -57,6 +67,11 @@ function MessagesPageInner() {
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showLogDialog, setShowLogDialog] = useState(false);
+  const [applications, setApplications] = useState<Application[]>([]);
+  const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
+  const [loggingFollowUp, setLoggingFollowUp] = useState(false);
+  const [logged, setLogged] = useState(false);
 
   // Pre-fill from query params (e.g. from Tonight's Plan)
   useEffect(() => {
@@ -87,6 +102,7 @@ function MessagesPageInner() {
     setLoading(true);
     setResult("");
     setCopied(false);
+    setLogged(false);
 
     try {
       let response: { content: string };
@@ -150,6 +166,38 @@ function MessagesPageInner() {
       toast.error("Failed to generate message. Please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleLogAsSent() {
+    setLoggingFollowUp(true);
+    try {
+      const apps = await getApplications();
+      setApplications(apps);
+      const match = apps.find(
+        (a) => a.company.toLowerCase() === (formData.company || "").toLowerCase()
+      );
+      setSelectedAppId(match ? match.id : apps[0]?.id ?? null);
+      setShowLogDialog(true);
+    } catch {
+      toast.error("Failed to load applications.");
+    } finally {
+      setLoggingFollowUp(false);
+    }
+  }
+
+  async function handleConfirmLog() {
+    if (!selectedAppId) return;
+    setLoggingFollowUp(true);
+    try {
+      await updateApplicationStatus(selectedAppId, "Follow-up Sent");
+      toast.success("Logged as Follow-up Sent");
+      setLogged(true);
+      setShowLogDialog(false);
+    } catch {
+      toast.error("Failed to update status.");
+    } finally {
+      setLoggingFollowUp(false);
     }
   }
 
@@ -542,19 +590,37 @@ function MessagesPageInner() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>Generated Message</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCopy}
-              className="flex items-center gap-2"
-            >
-              {copied ? (
-                <Check className="h-4 w-4" />
-              ) : (
-                <Copy className="h-4 w-4" />
+            <div className="flex items-center gap-2">
+              {messageType === "follow-up" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLogAsSent}
+                  disabled={loggingFollowUp || logged}
+                  className="flex items-center gap-2"
+                >
+                  {loggingFollowUp ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : logged ? (
+                    <Check className="h-4 w-4" />
+                  ) : null}
+                  {logged ? "Logged" : "Log as Sent"}
+                </Button>
               )}
-              {copied ? "Copied" : "Copy"}
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCopy}
+                className="flex items-center gap-2"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                {copied ? "Copied" : "Copy"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="whitespace-pre-wrap rounded-lg border bg-muted/50 p-4 text-sm">
@@ -563,6 +629,44 @@ function MessagesPageInner() {
           </CardContent>
         </Card>
       )}
+
+      {/* ---- Log as Sent Dialog ---- */}
+      <Dialog open={showLogDialog} onOpenChange={setShowLogDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log Follow-up as Sent</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Select the application to mark as <span className="font-medium text-yellow-400">Follow-up Sent</span>:
+            </p>
+            <Select
+              value={selectedAppId?.toString() ?? ""}
+              onValueChange={(v) => setSelectedAppId(Number(v))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select application..." />
+              </SelectTrigger>
+              <SelectContent>
+                {applications.map((app) => (
+                  <SelectItem key={app.id} value={app.id.toString()}>
+                    {app.company} — {app.role}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLogDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmLog} disabled={!selectedAppId || loggingFollowUp}>
+              {loggingFollowUp ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

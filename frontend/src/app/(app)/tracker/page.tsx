@@ -104,6 +104,7 @@ const PLATFORMS = [
 
 const STATUSES = [
   "Applied",
+  "Follow-up Sent",
   "Assignment Submitted",
   "Interview",
   "Offer",
@@ -114,6 +115,7 @@ const STATUSES = [
 
 const STATUS_COLORS: Record<string, string> = {
   Applied: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  "Follow-up Sent": "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
   "Assignment Submitted": "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
   Interview: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   Offer: "bg-purple-500/15 text-purple-400 border-purple-500/30",
