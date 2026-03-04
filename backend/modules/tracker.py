@@ -690,7 +690,7 @@ def send_push_notifications(title, body, url="/dashboard"):
             sent += 1
         except WebPushException as e:
             print(f"Push failed for {sub['endpoint'][:50]}...: {e}")
-            if e.response and e.response.status_code in (404, 410):
+            if e.response and e.response.status_code in (400, 404, 410):
                 delete_push_subscription(sub["endpoint"])
                 print("  Removed stale subscription.")
         except Exception as e:

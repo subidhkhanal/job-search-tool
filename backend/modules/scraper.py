@@ -333,6 +333,54 @@ def _title_passes_filter(title):
     return False
 
 
+def _llm_filter_jobs(jobs):
+    """Use LLM to filter jobs for relevance to the user's profile.
+    Returns filtered list on success, or None to signal fallback to keyword filter."""
+    import json
+    try:
+        from groq import Groq
+        from message_generator import _get_profile_text
+    except Exception:
+        return None
+
+    api_key = os.environ.get("GROQ_API_KEY", "")
+    if not api_key:
+        return None
+
+    profile_text = _get_profile_text()
+    job_list = "\n".join(
+        f"{i}. {j['title']} — {j['company']}" for i, j in enumerate(jobs)
+    )
+
+    prompt = f"""You are filtering job listings for an AI/ML job seeker.
+
+CANDIDATE PROFILE:
+{profile_text}
+
+JOB LISTINGS:
+{job_list}
+
+Return ONLY a JSON array of the 0-based index numbers of jobs relevant for this candidate.
+Include: AI, ML, data science, NLP, LLM, GenAI, computer vision, research, automation engineering roles.
+Exclude: pure frontend, DevOps, cloud ops, marketing, sales, HR, finance, blockchain, content.
+Example: [0, 2, 5]
+Respond with ONLY the JSON array, nothing else."""
+
+    try:
+        client = Groq(api_key=api_key)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=300,
+        )
+        indices = json.loads(response.choices[0].message.content.strip())
+        return [jobs[i] for i in indices if 0 <= i < len(jobs)]
+    except Exception as e:
+        print(f"  LLM title filter failed: {e} — falling back to keyword filter")
+        return None
+
+
 def _is_blacklisted(company, blacklist):
     """Check if company name matches any blacklisted name (substring match)."""
     if not blacklist:
@@ -424,11 +472,6 @@ def scrape_linkedin():
                     continue
                 after_location_filter += 1
 
-                # Title filter
-                if not _title_passes_filter(title):
-                    continue
-                after_title_filter += 1
-
                 company = str(row.get("company", "Unknown")).strip() or "Unknown"
                 url = str(row.get("job_url", "")).strip()
 
@@ -468,8 +511,21 @@ def scrape_linkedin():
         except Exception as e:
             print(f"  LinkedIn query '{query}' ({location}) error: {e}")
 
-    # Convert dedup map to list and score
+    # Convert dedup map to list
     jobs = list(dedup_map.values())
+
+    # LLM relevance filter (with keyword fallback)
+    if jobs:
+        print(f"  Running LLM relevance filter on {len(jobs)} India jobs...")
+        llm_result = _llm_filter_jobs(jobs)
+        if llm_result is not None:
+            jobs = llm_result
+            print(f"  LLM filter: {len(jobs)} relevant jobs")
+        else:
+            jobs = [j for j in jobs if _title_passes_filter(j["title"])]
+            print(f"  Keyword fallback filter: {len(jobs)} relevant jobs")
+    after_title_filter = len(jobs)
+
     for job in jobs:
         job["score"] = _score_linkedin_job(job)
     jobs.sort(key=lambda j: j["score"], reverse=True)
@@ -980,8 +1036,6 @@ def run_all_scrapers():
         ("HN Who's Hiring", scrape_hn_who_is_hiring),
         ("Arbeitnow", scrape_arbeitnow),
         ("LinkedIn AI/ML", scrape_linkedin),
-        ("HasJob", scrape_hasjob),
-        ("developersIndia", scrape_developersindia),
         ("Internshala", scrape_internshala),
         ("RemoteOK", scrape_remoteok),
         ("Himalayas", scrape_himalayas),
