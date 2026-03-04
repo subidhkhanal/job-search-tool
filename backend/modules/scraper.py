@@ -297,6 +297,14 @@ _TITLE_EXACT_PHRASES = [
 ]
 
 
+def _is_india_or_remote(location_str):
+    """Keep job only if location contains 'india' (case-insensitive).
+    Covers onsite/hybrid in India and remote roles explicitly listed for India."""
+    if not location_str or not location_str.strip():
+        return False
+    return "india" in location_str.lower()
+
+
 def _load_blacklist():
     """Load company blacklist from blacklist.txt. Returns a set of lowercase names."""
     blacklist_path = os.path.join(os.path.dirname(__file__), "..", "..", "blacklist.txt")
@@ -384,6 +392,7 @@ def scrape_linkedin():
 
     # Stats
     total_raw = 0
+    after_location_filter = 0
     after_title_filter = 0
     after_blacklist = 0
     combos_run = 0
@@ -409,6 +418,11 @@ def scrape_linkedin():
                 title = str(row.get("title", "")).strip()
                 if not title:
                     continue
+
+                # Location filter — must contain "india"
+                if not _is_india_or_remote(str(row.get("location", ""))):
+                    continue
+                after_location_filter += 1
 
                 # Title filter
                 if not _title_passes_filter(title):
@@ -472,6 +486,7 @@ def scrape_linkedin():
     print(f"Time filter: last 24 hours")
     print(f"Results per query: up to 50")
     print(f"Total raw results: {total_raw}")
+    print(f"After location filter: {after_location_filter} (dropped {total_raw - after_location_filter} non-India)")
     print(f"After title filter: {after_title_filter}")
     print(f"After blacklist: {after_blacklist}")
     print(f"After in-memory dedup: {len(jobs)}")
