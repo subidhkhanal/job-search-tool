@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { tailorResume } from "@/lib/api";
 import type { ResumeTailorResult } from "@/lib/types";
@@ -54,7 +54,7 @@ function difficultyColor(difficulty: string) {
   return "bg-muted text-muted-foreground";
 }
 
-export default function ResumeTailorPage() {
+function ResumeTailorContent() {
   const searchParams = useSearchParams();
   const [title, setTitle] = useState("");
   const [jdText, setJdText] = useState("");
@@ -376,5 +376,13 @@ export default function ResumeTailorPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ResumeTailorPage() {
+  return (
+    <Suspense>
+      <ResumeTailorContent />
+    </Suspense>
   );
 }
