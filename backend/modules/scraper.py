@@ -298,11 +298,11 @@ _TITLE_EXACT_PHRASES = [
 
 
 def _is_india_or_remote(location_str):
-    """Keep job only if location contains 'india' (case-insensitive).
-    Covers onsite/hybrid in India and remote roles explicitly listed for India."""
+    """Keep job if location contains 'india' or indicates remote."""
     if not location_str or not location_str.strip():
         return False
-    return "india" in location_str.lower()
+    loc = location_str.lower()
+    return "india" in loc or "remote" in loc
 
 
 def _load_blacklist():
