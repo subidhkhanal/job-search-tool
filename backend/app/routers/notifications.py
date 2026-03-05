@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from ..dependencies import get_current_user
 from ..models.schemas import PushSubscriptionRequest
 from tracker import (
     get_notifications,
@@ -18,27 +17,25 @@ router = APIRouter()
 def list_notifications(
     unread_only: bool = False,
     limit: int = 50,
-    _user: str = Depends(get_current_user),
 ):
     return get_notifications(unread_only=unread_only, limit=limit)
 
 
 @router.get("/unread-count")
-def unread_count(_user: str = Depends(get_current_user)):
+def unread_count():
     return {"count": get_unread_count()}
 
 
 @router.patch("/{notification_id}/read")
 def mark_read(
     notification_id: int,
-    _user: str = Depends(get_current_user),
 ):
     mark_notification_read(notification_id)
     return {"success": True}
 
 
 @router.post("/mark-all-read")
-def mark_all_read(_user: str = Depends(get_current_user)):
+def mark_all_read():
     mark_all_notifications_read()
     return {"success": True}
 
@@ -46,7 +43,6 @@ def mark_all_read(_user: str = Depends(get_current_user)):
 @router.post("/push/subscribe")
 def subscribe_push(
     data: PushSubscriptionRequest,
-    _user: str = Depends(get_current_user),
 ):
     save_push_subscription(
         endpoint=data.endpoint,
@@ -59,7 +55,6 @@ def subscribe_push(
 @router.post("/push/unsubscribe")
 def unsubscribe_push(
     data: PushSubscriptionRequest,
-    _user: str = Depends(get_current_user),
 ):
     delete_push_subscription(endpoint=data.endpoint)
     return {"success": True}

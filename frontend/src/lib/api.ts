@@ -26,7 +26,6 @@ import type {
   ScrapedJob,
   StatusFunnel,
   ThankYouRequest,
-  TokenResponse,
   UpdateDemoRequest,
   UserProfile,
   UserProfileUpdate,
@@ -37,26 +36,13 @@ import type {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("token");
-}
-
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...((options.headers as Record<string, string>) || {}),
   };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-
-  if (res.status === 401) {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-    throw new Error("Unauthorized");
-  }
 
   if (!res.ok) {
     const body = await res.text();
@@ -64,14 +50,6 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
   }
 
   return res.json();
-}
-
-// ---- Auth ----
-export async function login(username: string, password: string): Promise<TokenResponse> {
-  return apiFetch<TokenResponse>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
 }
 
 // ---- Applications ----

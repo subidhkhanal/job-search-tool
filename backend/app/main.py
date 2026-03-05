@@ -12,7 +12,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import get_settings
 from .routers import (
     applications,
-    auth_router,
     company_research,
     jd_analyzer,
     messages,
@@ -43,7 +42,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth_router.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(applications.router, prefix="/api/applications", tags=["Applications"])
 app.include_router(stats.router, prefix="/api/stats", tags=["Stats"])
 app.include_router(scraper.router, prefix="/api/scraped-jobs", tags=["Scraped Jobs"])

@@ -48,18 +48,6 @@ class UserProfileResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
-# ---- Auth ----
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
 # ---- Applications ----
 
 class AddApplicationRequest(BaseModel):

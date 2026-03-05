@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from typing import Optional
 
-from ..dependencies import get_current_user
 from ..models.schemas import AddReferralRequest, UpdateReferralStatusRequest
 from tracker import (
     add_referral,
@@ -17,7 +16,6 @@ router = APIRouter()
 @router.get("")
 def list_referrals(
     company: Optional[str] = Query(None),
-    _user: str = Depends(get_current_user),
 ):
     if company:
         df = get_referrals_by_company(company)
@@ -33,7 +31,6 @@ def list_referrals(
 @router.post("")
 def create_referral(
     body: AddReferralRequest,
-    _user: str = Depends(get_current_user),
 ):
     add_referral(
         contact_name=body.contact_name,
@@ -51,18 +48,17 @@ def create_referral(
 def patch_referral_status(
     referral_id: int,
     body: UpdateReferralStatusRequest,
-    _user: str = Depends(get_current_user),
 ):
     update_referral_status(referral_id, body.status)
     return {"success": True}
 
 
 @router.get("/stats")
-def referral_statistics(_user: str = Depends(get_current_user)):
+def referral_statistics():
     return get_referral_stats()
 
 
 @router.get("/follow-ups")
-def referral_follow_ups(_user: str = Depends(get_current_user)):
+def referral_follow_ups():
     df = get_referral_follow_ups_due()
     return df.to_dict("records") if not df.empty else []

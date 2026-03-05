@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,7 +20,6 @@ import {
   Users,
   ExternalLink,
   Settings,
-  LogOut,
   Menu,
   X,
   PanelLeftClose,
@@ -49,7 +47,6 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
-  const { logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -156,31 +153,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             )}
           </div>
 
-          {/* Sign Out */}
-          {collapsed ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-full text-sidebar-foreground/70"
-                  onClick={logout}
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Sign Out</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 text-sidebar-foreground/70"
-              onClick={logout}
-            >
-              <LogOut className="h-4 w-4" />
-              Sign Out
-            </Button>
-          )}
         </div>
       </aside>
     </TooltipProvider>

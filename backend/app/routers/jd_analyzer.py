@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from ..dependencies import get_current_user
 from ..models.schemas import ATSCheckRequest, FullAnalyzeRequest
 from jd_analyzer import ats_check, full_analyze, _get_default_resume_text
 from company_research import research_company
@@ -12,7 +11,6 @@ router = APIRouter()
 @router.post("/full")
 def full_analysis(
     body: FullAnalyzeRequest,
-    _user: str = Depends(get_current_user),
 ):
     result = full_analyze(body.title, body.description)
 
@@ -39,7 +37,6 @@ def full_analysis(
 @router.post("/ats")
 def ats_only(
     body: ATSCheckRequest,
-    _user: str = Depends(get_current_user),
 ):
     resume = body.custom_resume or _get_default_resume_text()
     return ats_check(resume, body.jd_text)

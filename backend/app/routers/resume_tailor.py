@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from groq import Groq
 
-from ..dependencies import get_current_user, get_groq_client
+from ..dependencies import get_groq_client
 from ..models.schemas import ResumeTailorRequest
 from resume_tailor import (
     analyze_gaps,
@@ -17,7 +17,6 @@ router = APIRouter()
 def tailor_resume(
     body: ResumeTailorRequest,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     projects = suggest_project_order(body.jd_text)
     skills = suggest_skill_order(body.jd_text)

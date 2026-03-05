@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from groq import Groq
 
-from ..dependencies import get_current_user, get_groq_client
+from ..dependencies import get_groq_client
 from ..models.schemas import (
     ColdDMRequest,
     CoverLetterRequest,
@@ -26,7 +26,6 @@ router = APIRouter()
 def cold_dm(
     body: ColdDMRequest,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     content = generate_cold_dm(
         client,
@@ -43,7 +42,6 @@ def cold_dm(
 def follow_up(
     body: FollowUpRequest,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     content = generate_follow_up(
         client,
@@ -59,7 +57,6 @@ def follow_up(
 def cover_letter(
     body: CoverLetterRequest,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     content = generate_cover_letter(
         client,
@@ -75,7 +72,6 @@ def cover_letter(
 def thank_you(
     body: ThankYouRequest,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     content = generate_thank_you(
         client,
@@ -90,7 +86,6 @@ def thank_you(
 def referral_request(
     body: ReferralRequestBody,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     content = generate_referral_request(
         client,
@@ -107,7 +102,6 @@ def referral_request(
 def demo_outreach(
     body: DemoOutreachRequest,
     client: Groq = Depends(get_groq_client),
-    _user: str = Depends(get_current_user),
 ):
     content = generate_demo_outreach(
         client,

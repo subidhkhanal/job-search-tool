@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from typing import Optional
 
-from ..dependencies import get_current_user
 from ..models.schemas import AddApplicationRequest, UpdateStatusRequest, UpdateNotesRequest
 from tracker import (
     add_application,
@@ -19,7 +18,7 @@ def list_applications(
     status_filter: Optional[str] = Query(None, alias="status"),
     type_filter: Optional[str] = Query(None, alias="type"),
     platform: Optional[str] = None,
-    _user: str = Depends(get_current_user),
+
 ):
     df = get_all_applications()
     if df.empty:
@@ -36,7 +35,7 @@ def list_applications(
 @router.post("")
 def create_application(
     body: AddApplicationRequest,
-    _user: str = Depends(get_current_user),
+
 ):
     add_application(
         company=body.company,
@@ -56,7 +55,7 @@ def create_application(
 def patch_status(
     app_id: int,
     body: UpdateStatusRequest,
-    _user: str = Depends(get_current_user),
+
 ):
     update_status(app_id, body.status)
     return {"success": True}
@@ -66,7 +65,7 @@ def patch_status(
 def patch_notes(
     app_id: int,
     body: UpdateNotesRequest,
-    _user: str = Depends(get_current_user),
+
 ):
     update_notes(app_id, body.notes)
     return {"success": True}
@@ -75,7 +74,7 @@ def patch_notes(
 @router.delete("/{app_id}")
 def remove_application(
     app_id: int,
-    _user: str = Depends(get_current_user),
+
 ):
     delete_application(app_id)
     return {"success": True}
