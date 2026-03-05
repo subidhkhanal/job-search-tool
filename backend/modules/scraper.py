@@ -361,7 +361,7 @@ JOB LISTINGS:
 {job_list}
 
 Return ONLY a JSON array of the 0-based index numbers of jobs relevant for this candidate.
-Include: AI, ML, data science, NLP, LLM, GenAI, computer vision, research, automation engineering roles.
+Include: AI, ML, data science, NLP, LLM, GenAI, computer vision, research, automation engineering, python developer, software developer, backend developer roles.
 Exclude: pure frontend, DevOps, cloud ops, marketing, sales, HR, finance, blockchain, content.
 Example: [0, 2, 5]
 Respond with ONLY the JSON array, nothing else."""

@@ -192,20 +192,25 @@ export interface ResumeTailorRequest {
 }
 
 export interface ResumeTailorResult {
-  projects: Array<{
-    name: string;
-    matches: number;
-    keywords: string[];
-    one_liner: string;
-  }> | string[];
-  skills: string[];
+  tailored_latex: string;
+  changes: Array<{
+    section: string;
+    what_changed: string;
+    why: string;
+  }>;
+  bullet_diffs: Array<{
+    section: string;
+    original: string;
+    rewritten: string;
+    keywords_added: string[];
+  }>;
+  ats_before: number;
+  ats_after: number;
   gaps: Array<{
     skill: string;
     difficulty: string;
-    emoji: string;
     note: string;
-  }> | string[];
-  summaries: string[];
+  }>;
 }
 
 // ---- Company Research ----

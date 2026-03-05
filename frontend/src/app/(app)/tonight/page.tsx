@@ -30,7 +30,7 @@ import {
   MapPin,
   AlertTriangle,
   Check,
-  FileSearch,
+  FileText,
   MessageSquare,
   RefreshCw,
   XCircle,
@@ -385,14 +385,13 @@ export default function TonightPage() {
                             onClick={() => {
                               const params = new URLSearchParams({
                                 title: job.title,
-                                company: job.company,
-                                description: (job.description || "").slice(0, 2000),
+                                jd_text: (job.description || "").slice(0, 2000),
                               });
-                              router.push(`/analyzer?${params.toString()}`);
+                              router.push(`/resume-tailor?${params.toString()}`);
                             }}
                           >
-                            <FileSearch className="mr-1.5 h-3.5 w-3.5" />
-                            Analyze
+                            <FileText className="mr-1.5 h-3.5 w-3.5" />
+                            Tailor Resume
                           </Button>
                           <Button
                             variant="outline"

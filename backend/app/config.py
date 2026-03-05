@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
     GROQ_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
     JOOBLE_API_KEY: str = ""
     GMAIL_ADDRESS: str = ""
     GMAIL_APP_PASSWORD: str = ""

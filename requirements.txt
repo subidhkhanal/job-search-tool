@@ -11,3 +11,4 @@ lxml>=4.9.0
 supabase>=2.0.0
 googlesearch-python>=1.2.0
 markdown>=3.5.0
+openai>=1.0.0

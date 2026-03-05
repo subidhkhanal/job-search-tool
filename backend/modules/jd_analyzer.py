@@ -255,19 +255,8 @@ def _get_default_resume_text():
     except Exception:
         pass
 
-    # Fall back to hardcoded data
-    from resume_tailor import RESUME_SKILLS, PROJECTS
-    from message_generator import SUBIDH_PROFILE
-    project_lines = []
-    for name, info in PROJECTS.items():
-        project_lines.append(f"{name}: {info['one_liner']}. Keywords: {', '.join(info['keywords'])}")
-    _DEFAULT_RESUME_TEXT_CACHE = (
-        f"SKILLS: {', '.join(RESUME_SKILLS)}\n\n"
-        f"PROFILE:\n{SUBIDH_PROFILE}\n\n"
-        f"PROJECTS:\n" + "\n".join(project_lines) + "\n\n"
-        f"EDUCATION:\nM.Tech in Artificial Intelligence, Amity University Noida (graduating March 2026)\n\n"
-        f"ADDITIONAL SKILLS: {', '.join(ALL_MY_SKILLS)}"
-    )
+    # Fall back to basic skills list if profile unavailable
+    _DEFAULT_RESUME_TEXT_CACHE = f"SKILLS: {', '.join(ALL_MY_SKILLS)}"
     return _DEFAULT_RESUME_TEXT_CACHE
 
 

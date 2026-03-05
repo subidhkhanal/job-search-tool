@@ -1,31 +1,19 @@
-from fastapi import APIRouter, Depends
-from groq import Groq
+from fastapi import APIRouter, Depends, HTTPException
+from openai import OpenAI
 
-from ..dependencies import get_groq_client
+from ..dependencies import get_openai_client
 from ..models.schemas import ResumeTailorRequest
-from resume_tailor import (
-    analyze_gaps,
-    generate_summary_lines,
-    suggest_project_order,
-    suggest_skill_order,
-)
+from resume_tailor import tailor_resume
 
 router = APIRouter()
 
 
 @router.post("")
-def tailor_resume(
+def tailor_resume_endpoint(
     body: ResumeTailorRequest,
-    client: Groq = Depends(get_groq_client),
+    client: OpenAI = Depends(get_openai_client),
 ):
-    projects = suggest_project_order(body.jd_text)
-    skills = suggest_skill_order(body.jd_text)
-    gaps = analyze_gaps(body.jd_text)
-    summaries = generate_summary_lines(client, body.title, body.jd_text)
-
-    return {
-        "projects": projects,
-        "skills": skills,
-        "gaps": gaps,
-        "summaries": summaries,
-    }
+    try:
+        return tailor_resume(client, body.title, body.jd_text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
