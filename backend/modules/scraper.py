@@ -628,58 +628,135 @@ def scrape_developersindia():
     return jobs
 
 
-def scrape_internshala():
-    """Scrape Internshala for AI/ML internships."""
+_INTERNSHALA_CATEGORIES = [
+    "work-from-home-artificial-intelligence-internship",
+    "work-from-home-machine-learning-internship",
+    "work-from-home-data-science-internship",
+    "work-from-home-python-internship",
+]
+
+_INTERNSHALA_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Accept": "text/html, */*; q=0.01",
+    "X-Requested-With": "XMLHttpRequest",
+    "Referer": "https://internshala.com/internships/",
+}
+
+
+def _parse_internshala_cards(html, seen_urls):
+    """Parse Internshala internship cards from HTML. Returns list of job dicts."""
+    soup = BeautifulSoup(html, "html.parser")
     jobs = []
+
+    for card in soup.select(".individual_internship"):
+        title_el = card.select_one("h3.job-internship-name a, h3.job-internship-name")
+        company_el = card.select_one(".company-name")
+        location_el = card.select_one(".locations")
+
+        if not title_el:
+            continue
+
+        title = title_el.get_text(strip=True)
+        company = company_el.get_text(strip=True) if company_el else "Unknown"
+        location = location_el.get_text(strip=True) if location_el else "India"
+
+        link = ""
+        link_el = title_el if title_el.name == "a" else card.select_one("a.job-title-href, .company a[href]")
+        if link_el:
+            link = link_el.get("href", "")
+        if link and not link.startswith("http"):
+            link = f"https://internshala.com{link}"
+
+        if link in seen_urls:
+            continue
+        if link:
+            seen_urls.add(link)
+
+        # Extract stipend and duration from row-1 items
+        row_items = card.select(".row-1-item")
+        stipend = ""
+        duration = ""
+        for item in row_items:
+            text = item.get_text(strip=True)
+            if "/month" in text or "/week" in text:
+                stipend = text
+            elif "Month" in text or "Week" in text or "Day" in text:
+                duration = text
+
+        skills = ", ".join(
+            s.get_text(strip=True) for s in card.select(".skill_container")
+        )
+
+        desc_parts = [f"Internship: {title}"]
+        if stipend:
+            desc_parts.append(f"Stipend: {stipend}")
+        if duration:
+            desc_parts.append(f"Duration: {duration}")
+        if skills:
+            desc_parts.append(f"Skills: {skills}")
+
+        job_data = {
+            "title": title[:150],
+            "company": company[:80],
+            "location": location[:80],
+            "source": "Internshala",
+            "url": link,
+            "description": " | ".join(desc_parts)[:500],
+        }
+        jobs.append(job_data)
+
+    return jobs
+
+
+def scrape_internshala():
+    """Scrape Internshala for AI/ML internships via their AJAX endpoint."""
     seen_urls = set()
-    urls = [
-        "https://internshala.com/internships/work-from-home-artificial-intelligence-internship",
-        "https://internshala.com/internships/work-from-home-machine-learning-internship",
-        "https://internshala.com/internships/work-from-home-data-science-internship",
-        "https://internshala.com/internships/work-from-home-python-internship",
-    ]
-    try:
-        for page_url in urls:
-            resp = _get_with_retry(page_url, headers={"User-Agent": "Mozilla/5.0"})
-            soup = BeautifulSoup(resp.text, "html.parser")
+    dedup_map = {}
+    blacklist = _load_blacklist()
 
-            for card in soup.select(".individual_internship"):
-                title_el = card.select_one("h3.job-internship-name")
-                company_el = card.select_one(".company-name")
-                location_el = card.select_one(".locations")
-                link_el = card.select_one(".company a[href]")
+    for category in _INTERNSHALA_CATEGORIES:
+        try:
+            ajax_url = f"https://internshala.com/internships_ajax/{category}"
+            resp = _get_with_retry(ajax_url, headers=_INTERNSHALA_HEADERS)
+            data = resp.json()
 
-                if not title_el:
+            html = data.get("internship_list_html", "")
+            if not html:
+                continue
+
+            parsed = _parse_internshala_cards(html, seen_urls)
+            for job in parsed:
+                # Blacklist check
+                if _is_blacklisted(job["company"], blacklist):
                     continue
 
-                title = title_el.get_text(strip=True)
-                company = company_el.get_text(strip=True) if company_el else "Unknown"
-                location = location_el.get_text(strip=True) if location_el else "India"
-                link = link_el.get("href", "") if link_el else ""
-                if link and not link.startswith("http"):
-                    link = f"https://internshala.com{link}"
+                # In-memory dedup by normalized title + company
+                dedup_key = _normalize_for_dedup(job["title"]) + "||" + _normalize_for_dedup(job["company"])
+                if dedup_key in dedup_map:
+                    dedup_map[dedup_key]["match_count"] += 1
+                else:
+                    job["match_count"] = 1
+                    job["scraped_at"] = datetime.now().isoformat()
+                    dedup_map[dedup_key] = job
 
-                if link in seen_urls:
-                    continue
-                if link:
-                    seen_urls.add(link)
-
-                skills = " ".join(
-                    s.get_text(strip=True) for s in card.select(".skill_container")
-                )
-
-                job_data = {
-                    "title": title[:150],
-                    "company": company[:80],
-                    "location": location[:80],
-                    "source": "Internshala",
-                    "url": link,
-                    "description": f"Internship: {title} | Skills: {skills}"[:500],
-                }
-                jobs.append(job_data)
             time.sleep(2)
-    except Exception as e:
-        print(f"Internshala error: {e}")
+        except Exception as e:
+            print(f"  Internshala error for {category}: {e}")
+
+    jobs = list(dedup_map.values())
+
+    # LLM relevance filter (with keyword fallback) — same as LinkedIn
+    if jobs:
+        print(f"  Running LLM relevance filter on {len(jobs)} Internshala jobs...")
+        llm_result = _llm_filter_jobs(jobs)
+        if llm_result is not None:
+            jobs = llm_result
+            print(f"  LLM filter: {len(jobs)} relevant jobs")
+        else:
+            # Check title + description (includes skills) since Internshala titles can be generic
+            jobs = [j for j in jobs if matches_keywords(j["title"] + " " + j.get("description", ""))]
+            print(f"  Keyword fallback filter: {len(jobs)} relevant jobs")
+
     return jobs
 
 
