@@ -89,25 +89,53 @@ def _detect_duration(text):
 
 
 def build_email_content(jobs, sources_status, sources_errors=None):
-    """Build clean markdown table for the email."""
+    """Build clean markdown table for the email.
+
+    Jobs with `filtered=True` passed the relevance filter (saved to site).
+    Jobs with `filtered=False` were rejected by the filter (email-only).
+    """
     lines = []
 
-    if jobs:
-        lines.append("| # | Title | Company | Location | Score | Verdict | Link |")
-        lines.append("|---|-------|---------|----------|-------|---------|------|")
+    if not jobs:
+        lines.append("No new internships found.")
+        return "\n".join(lines)
 
-        for idx, j in enumerate(jobs, 1):
+    # Split into filtered (on site) and unfiltered (email-only)
+    filtered_jobs = [j for j in jobs if j.get("filtered", True)]
+    rejected_jobs = [j for j in jobs if not j.get("filtered", True)]
+
+    if filtered_jobs:
+        lines.append(f"### Relevant Jobs ({len(filtered_jobs)})")
+        lines.append("")
+        lines.append("| # | Title | Company | Location | Score | Source | Link |")
+        lines.append("|---|-------|---------|----------|-------|--------|------|")
+
+        for idx, j in enumerate(filtered_jobs, 1):
             title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
             company = j.get("company", "-").replace("|", "/").strip()[:25]
             location = j.get("location", "-").replace("|", "/").strip()[:20]
             score = j.get("score", 0)
-            verdict = j.get("verdict", "-").replace("|", "/").strip()[:15]
+            source = j.get("source", "-").replace("|", "/").strip()[:15]
             url = j.get("url", "")
             link = f"[Apply]({url})" if url else "-"
+            lines.append(f"| {idx} | {title} | {company} | {location} | {score} | {source} | {link} |")
 
-            lines.append(f"| {idx} | {title} | {company} | {location} | {score} | {verdict} | {link} |")
-    else:
-        lines.append("No new internships found.")
+    if rejected_jobs:
+        lines.append("")
+        lines.append(f"### Filtered Out ({len(rejected_jobs)}) — review for false negatives")
+        lines.append("")
+        lines.append("| # | Title | Company | Location | Score | Source | Link |")
+        lines.append("|---|-------|---------|----------|-------|--------|------|")
+
+        for idx, j in enumerate(rejected_jobs, 1):
+            title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
+            company = j.get("company", "-").replace("|", "/").strip()[:25]
+            location = j.get("location", "-").replace("|", "/").strip()[:20]
+            score = j.get("score", 0)
+            source = j.get("source", "-").replace("|", "/").strip()[:15]
+            url = j.get("url", "")
+            link = f"[Apply]({url})" if url else "-"
+            lines.append(f"| {idx} | {title} | {company} | {location} | {score} | {source} | {link} |")
 
     return "\n".join(lines)
 

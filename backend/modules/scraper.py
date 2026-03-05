@@ -513,17 +513,6 @@ def scrape_linkedin():
 
     # Convert dedup map to list
     jobs = list(dedup_map.values())
-
-    # LLM relevance filter (with keyword fallback)
-    if jobs:
-        print(f"  Running LLM relevance filter on {len(jobs)} India jobs...")
-        llm_result = _llm_filter_jobs(jobs)
-        if llm_result is not None:
-            jobs = llm_result
-            print(f"  LLM filter: {len(jobs)} relevant jobs")
-        else:
-            jobs = [j for j in jobs if _title_passes_filter(j["title"])]
-            print(f"  Keyword fallback filter: {len(jobs)} relevant jobs")
     after_title_filter = len(jobs)
 
     for job in jobs:
@@ -743,21 +732,7 @@ def scrape_internshala():
         except Exception as e:
             print(f"  Internshala error for {category}: {e}")
 
-    jobs = list(dedup_map.values())
-
-    # LLM relevance filter (with keyword fallback) — same as LinkedIn
-    if jobs:
-        print(f"  Running LLM relevance filter on {len(jobs)} Internshala jobs...")
-        llm_result = _llm_filter_jobs(jobs)
-        if llm_result is not None:
-            jobs = llm_result
-            print(f"  LLM filter: {len(jobs)} relevant jobs")
-        else:
-            # Check title + description (includes skills) since Internshala titles can be generic
-            jobs = [j for j in jobs if matches_keywords(j["title"] + " " + j.get("description", ""))]
-            print(f"  Keyword fallback filter: {len(jobs)} relevant jobs")
-
-    return jobs
+    return list(dedup_map.values())
 
 
 def scrape_remoteok():
@@ -1048,9 +1023,11 @@ def scrape_simplify_internships():
 
 def scrape_unstop():
     """Scrape Unstop (D2C) internships via their search API."""
-    jobs = []
     search_queries = ["ai ml internship", "machine learning intern", "data science intern",
                       "python intern", "gen ai internship"]
+    dedup_map = {}
+    blacklist = _load_blacklist()
+
     try:
         for query in search_queries:
             # Unstop search API (public, no auth)
@@ -1065,7 +1042,6 @@ def scrape_unstop():
                 timeout=15,
             )
             if resp.status_code == 403:
-                # Fallback: try scraping HTML search page
                 break
             resp.raise_for_status()
             data = resp.json()
@@ -1087,19 +1063,30 @@ def scrape_unstop():
                 if not is_allowed_location(combined):
                     continue
 
-                job_data = {
-                    "title": title[:150],
-                    "company": company[:80],
-                    "location": str(location)[:80] or "India",
-                    "source": "Unstop",
-                    "url": url,
-                    "description": f"Internship: {title} at {company}",
-                }
-                jobs.append(job_data)
+                # Blacklist check
+                if _is_blacklisted(company, blacklist):
+                    continue
+
+                # In-memory dedup by normalized title + company
+                dedup_key = _normalize_for_dedup(title) + "||" + _normalize_for_dedup(company)
+                if dedup_key in dedup_map:
+                    dedup_map[dedup_key]["match_count"] += 1
+                else:
+                    dedup_map[dedup_key] = {
+                        "title": title[:150],
+                        "company": company[:80],
+                        "location": str(location)[:80] or "India",
+                        "source": "Unstop",
+                        "url": url,
+                        "description": f"Internship: {title} at {company}",
+                        "match_count": 1,
+                        "scraped_at": datetime.now().isoformat(),
+                    }
             time.sleep(2)
     except Exception as e:
         print(f"Unstop error: {e}")
-    return jobs
+
+    return list(dedup_map.values())
 
 
 def run_all_scrapers():
