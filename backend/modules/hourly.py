@@ -62,6 +62,10 @@ def main():
     # Filter blocked companies
     new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
 
+    # Only keep jobs with intern/trainee/apprentice/fresher in the title
+    new_jobs = [j for j in new_jobs if any(kw in j.get("title", "").lower() for kw in ["intern", "trainee", "apprentice", "fresher"])]
+    print(f"After title filter (intern/trainee only): {len(new_jobs)}")
+
     # Health check: if LinkedIn scraper returned 0 results, flag it
     linkedin_count = sources_status.get("LinkedIn AI/ML", 0)
     if linkedin_count == 0 and "LinkedIn AI/ML" not in sources_errors:
