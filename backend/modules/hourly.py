@@ -34,91 +34,6 @@ def _get_blocked_companies():
 BLOCKED_COMPANIES = _DEFAULT_BLOCKED
 
 
-def score_job(job):
-    """Score a job listing based on profile match. Higher = better fit."""
-    text = (
-        job.get("title", "") + " " + job.get("description", "")
-    ).lower()
-    score = 0
-
-    # Instant disqualify: non-English
-    non_english = [
-        "deutsch", "fran\u00e7ais", "espa\u00f1ola", "wir suchen",
-        "aufgaben", "anforderungen", "stellenangebot",
-        "nous recherchons", "requisitos",
-    ]
-    if any(kw in text for kw in non_english):
-        return -100
-
-    # Exact stack match (FROM RESUME — highest signal)
-    stack_match = [
-        "langchain", "chromadb", "fastapi", "rag",
-        "openai api", "agentic", "cohere", "ragas",
-        "hybrid search", "next.js", "automation pipeline",
-        "gemini", "gemini api",
-    ]
-    score += sum(12 for kw in stack_match if kw in text)
-
-    # High-value keywords (general relevance)
-    high_value = [
-        "gen ai", "generative ai", "llm", "large language model",
-        "rag", "retrieval augmented", "ai agent", "agentic",
-        "langchain", "vector database", "nlp",
-    ]
-    score += sum(5 for kw in high_value if kw in text)
-
-    # Role title match
-    role_titles = [
-        "software developer", "software engineer", "ai developer",
-        "ml engineer", "data scientist", "ai engineer",
-        "machine learning developer", "gen ai developer",
-        "backend developer", "full stack developer",
-        "python developer", "automation engineer",
-        "nlp engineer", "ai intern", "ml intern",
-    ]
-    title_lower = job.get("title", "").lower()
-    score += sum(8 for t in role_titles if t in title_lower)
-
-    # Fresher/intern friendly bonus
-    if any(kw in text for kw in [
-        "intern", "fresher", "entry level", "0-1 year", "junior",
-    ]):
-        score += 5
-
-    # Negative signals
-    negative = ["senior", "5+ years", "lead", "principal", "unpaid",
-                "us only", "eu only", "clearance required"]
-    score -= sum(10 for kw in negative if kw in text)
-
-    # === Startup signals (small teams = higher response rates) ===
-    startup_signals = ["seed", "series a", "series b", "early stage", "founding",
-                       "small team", "10-50 employees", "startup", "funded",
-                       "yc", "y combinator"]
-    if any(kw in text for kw in startup_signals):
-        score += 8
-
-    # === Urgency signals (faster hiring process) ===
-    urgency_signals = ["immediate joining", "urgently hiring", "asap",
-                       "start immediately", "urgent requirement", "walk-in",
-                       "notice period: immediate"]
-    if any(kw in text for kw in urgency_signals):
-        score += 6
-
-    # === Direct contact available (skip HR) ===
-    direct_contact = ["email us at", "dm me", "reach out to", "contact:",
-                      "founders@", "hiring@", "apply directly",
-                      "send resume to", "whatsapp"]
-    if any(kw in text for kw in direct_contact):
-        score += 6
-
-    # === High competition penalty ===
-    high_competition = ["500+ applicants", "1000+ applicants", "200+ applicants",
-                        "500+ applications", "1000+ applications"]
-    if any(kw in text for kw in high_competition):
-        score -= 8
-
-    return score
-
 
 def main():
     print("=== Hourly Job Search Automation ===")
@@ -144,12 +59,8 @@ def main():
     new_jobs = [j for j in jobs if j.get("url", "") not in existing_urls]
     print(f"New jobs: {len(new_jobs)} (filtered out {len(jobs) - len(new_jobs)} duplicates)")
 
-    # Score and filter new jobs
-    for job in new_jobs:
-        job["score"] = score_job(job)
-    new_jobs = [j for j in new_jobs if j["score"] > -100]
+    # Filter blocked companies
     new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
-    new_jobs.sort(key=lambda j: j["score"], reverse=True)
 
     # Keep unfiltered jobs for email (so user can spot false negatives)
     all_new_jobs = list(new_jobs)

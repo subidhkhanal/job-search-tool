@@ -389,38 +389,6 @@ def _is_blacklisted(company, blacklist):
     return any(bl in company_lower for bl in blacklist)
 
 
-def _score_linkedin_job(job):
-    """Simple deterministic scoring for a LinkedIn job. Returns 0-100."""
-    score = 0
-    title_lower = job.get("title", "").lower()
-
-    # Exact title phrase match: +40
-    if any(phrase in title_lower for phrase in _TITLE_EXACT_PHRASES):
-        score += 40
-    # Partial keyword match: +20 (only if no exact match)
-    elif any(kw in title_lower for kw in _TITLE_INCLUDE):
-        score += 20
-
-    # Match count bonus: (match_count - 1) * 10, capped at +30
-    match_count = job.get("match_count", 1)
-    score += min((match_count - 1) * 10, 30)
-
-    # Company name present: +5
-    company = job.get("company", "").strip()
-    if company and company != "Unknown":
-        score += 5
-
-    # Location is Remote: +5
-    location = job.get("location", "").lower()
-    if "remote" in location:
-        score += 5
-
-    # Posted date available: +5
-    if job.get("posted_date"):
-        score += 5
-
-    return min(score, 100)
-
 
 def scrape_linkedin():
     """Scrape LinkedIn via JobSpy for targeted AI/ML internships."""
@@ -455,7 +423,6 @@ def scrape_linkedin():
                 site_name=["linkedin"],
                 search_term=query,
                 location=location,
-                job_type="internship",
                 hours_old=24,
                 results_wanted=50,
             )
@@ -515,14 +482,9 @@ def scrape_linkedin():
     jobs = list(dedup_map.values())
     after_title_filter = len(jobs)
 
-    for job in jobs:
-        job["score"] = _score_linkedin_job(job)
-    jobs.sort(key=lambda j: j["score"], reverse=True)
-
     # Print summary
     elapsed = time.time() - start_time
     avg_match = sum(j["match_count"] for j in jobs) / len(jobs) if jobs else 0
-    top_score = jobs[0]["score"] if jobs else 0
     health = "OK" if total_raw > 0 else "FAILED"
 
     print(f"\n--- LinkedIn Scraper Run Summary ---")
@@ -536,7 +498,6 @@ def scrape_linkedin():
     print(f"After blacklist: {after_blacklist}")
     print(f"After in-memory dedup: {len(jobs)}")
     print(f"Avg match count: {avg_match:.1f}")
-    print(f"Top score: {top_score}")
     print(f"Time taken: {elapsed:.0f}s")
     print(f"Health: {health}")
 
