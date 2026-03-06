@@ -270,6 +270,13 @@ _LINKEDIN_SEARCH_QUERIES = [
     "ai research intern",
     "research intern ai",
     "ai trainee",
+    "software development intern",
+    "software engineer intern",
+    "python developer intern",
+    "backend developer intern",
+    "full stack intern",
+    "ai ml intern",
+    "artificial intelligence intern",
 ]
 
 _LINKEDIN_LOCATIONS = ["India", "Remote"]
