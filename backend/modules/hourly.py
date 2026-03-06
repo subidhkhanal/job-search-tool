@@ -11,7 +11,7 @@ from tracker import (
     save_notification, init_notifications_table,
     send_push_notifications,
 )
-from scraper import run_all_scrapers, _llm_filter_jobs, matches_keywords
+from scraper import run_all_scrapers
 from send_email import build_email_content, send_email, get_alert_number
 
 # Default fallback blocked list
@@ -61,21 +61,6 @@ def main():
 
     # Filter blocked companies
     new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
-
-    # Keep unfiltered jobs for email (so user can spot false negatives)
-    all_new_jobs = list(new_jobs)
-
-    # Apply LLM relevance filter (with keyword fallback) — only filtered jobs go to DB/site
-    if new_jobs:
-        print(f"\nRunning LLM relevance filter on {len(new_jobs)} jobs...")
-        llm_result = _llm_filter_jobs(new_jobs)
-        if llm_result is not None:
-            new_jobs = llm_result
-            print(f"  LLM filter: {len(new_jobs)} relevant jobs")
-        else:
-            new_jobs = [j for j in new_jobs if matches_keywords(j["title"] + " " + j.get("description", ""))]
-            print(f"  Keyword fallback filter: {len(new_jobs)} relevant jobs")
-        print(f"  Filtered out: {len(all_new_jobs) - len(new_jobs)} jobs (will still appear in email)")
 
     # Health check: if LinkedIn scraper returned 0 results, flag it
     linkedin_count = sources_status.get("LinkedIn AI/ML", 0)
@@ -127,22 +112,19 @@ def main():
         except Exception:
             pass
 
-    # Only send email if there are any new jobs (filtered or unfiltered)
-    if not all_new_jobs:
+    # Only send email if there are any new jobs
+    if not new_jobs:
         print("\nNo new jobs found this run. Skipping email.")
         print("Done!")
         return
 
-    # Build email with ALL new jobs (unfiltered) so user can spot false negatives
     print("\nBuilding email content...")
     alert_number = get_alert_number()
 
-    # Mark which jobs passed the relevance filter
-    filtered_urls = {j.get("url", "") for j in new_jobs}
-    for job in all_new_jobs:
-        job["filtered"] = job.get("url", "") in filtered_urls
+    for job in new_jobs:
+        job["filtered"] = True
 
-    md_content = build_email_content(all_new_jobs, sources_status, sources_errors)
+    md_content = build_email_content(new_jobs, sources_status, sources_errors)
 
     # Send email
     print(f"Sending Job Alert #{alert_number}...")
@@ -155,7 +137,7 @@ def main():
             subject=f"Job Alert #{alert_number}",
             markdown_content=md_content,
             html_content="",
-            jobs_count=len(all_new_jobs),
+            jobs_count=len(new_jobs),
             sources_summary=sources_status,
             email_sent=email_sent,
         )
@@ -167,11 +149,10 @@ def main():
     try:
         save_notification(
             title=f"Job Alert #{alert_number}",
-            body=f"{len(new_jobs)} new relevant jobs ({len(all_new_jobs)} total)",
+            body=f"{len(new_jobs)} new jobs found",
             notification_type="job_alert",
             metadata={
                 "jobs_count": len(new_jobs),
-                "total_count": len(all_new_jobs),
                 "alert_number": alert_number,
                 "sources": sources_status,
             },
@@ -184,13 +165,13 @@ def main():
     try:
         send_push_notifications(
             title=f"Job Alert #{alert_number}",
-            body=f"{len(new_jobs)} new relevant jobs ({len(all_new_jobs)} total)",
+            body=f"{len(new_jobs)} new jobs found",
             url="/tonight",
         )
     except Exception as e:
         print(f"  WARNING: Could not send push notification: {e}")
 
-    print(f"\nDone! Job Alert #{alert_number} sent: {email_sent}. {len(new_jobs)} relevant jobs saved, {len(all_new_jobs)} total in email.")
+    print(f"\nDone! Job Alert #{alert_number} sent: {email_sent}. {len(new_jobs)} jobs saved.")
 
 
 if __name__ == "__main__":
