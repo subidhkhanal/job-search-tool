@@ -96,6 +96,13 @@ export async function deleteApplication(id: number) {
   });
 }
 
+export async function snoozeFollowUp(id: number, newDate: string) {
+  return apiFetch<{ success: boolean }>(`/api/applications/${id}/snooze`, {
+    method: "PATCH",
+    body: JSON.stringify({ new_date: newDate }),
+  });
+}
+
 // ---- Stats ----
 export async function getDashboard(): Promise<DashboardStats> {
   return apiFetch<DashboardStats>("/api/stats/dashboard");

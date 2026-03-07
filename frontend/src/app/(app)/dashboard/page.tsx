@@ -9,6 +9,7 @@ import {
   getStatusFunnel,
   getRoleAnalysis,
   getFollowUpEffectiveness,
+  snoozeFollowUp,
 } from "@/lib/api";
 import type {
   DashboardStats,
@@ -232,30 +233,74 @@ export default function DashboardPage() {
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {followUps.map((fu) => (
-                <div
-                  key={fu.id}
-                  className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold">{fu.company}</p>
-                    {(fu.follow_up_count ?? 0) > 0 && (
-                      <Badge variant="outline" className="text-[10px] h-5 bg-amber-500/10 text-amber-400 border-amber-500/30">
-                        #{(fu.follow_up_count ?? 0) + 1} of 3
-                      </Badge>
-                    )}
+              {followUps.map((fu) => {
+                const today = new Date().toISOString().split("T")[0];
+                const isOverdue = fu.follow_up_date < today;
+                const isDueToday = fu.follow_up_date === today;
+                const borderClass = isOverdue
+                  ? "border-red-500/60 bg-red-500/5"
+                  : isDueToday
+                    ? "border-amber-500/60 bg-amber-500/10"
+                    : "border-amber-500/40 bg-amber-500/5";
+                const dateClass = isOverdue
+                  ? "text-red-400 font-medium"
+                  : isDueToday
+                    ? "text-amber-400 font-medium"
+                    : "text-amber-400";
+                return (
+                  <div
+                    key={fu.id}
+                    className={`rounded-lg border p-4 space-y-1 ${borderClass}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold">{fu.company}</p>
+                      <div className="flex items-center gap-1.5">
+                        {isOverdue && (
+                          <Badge variant="outline" className="text-[10px] h-5 bg-red-500/10 text-red-400 border-red-500/30">
+                            Overdue
+                          </Badge>
+                        )}
+                        {isDueToday && (
+                          <Badge variant="outline" className="text-[10px] h-5 bg-amber-500/10 text-amber-400 border-amber-500/30">
+                            Today
+                          </Badge>
+                        )}
+                        {(fu.follow_up_count ?? 0) > 0 && (
+                          <Badge variant="outline" className="text-[10px] h-5 bg-amber-500/10 text-amber-400 border-amber-500/30">
+                            #{(fu.follow_up_count ?? 0) + 1} of 3
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-sm">{fu.role}</p>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className={`text-xs ${dateClass}`}>
+                        {fu.follow_up_date}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="date"
+                          className="h-6 w-[120px] rounded border border-border bg-background px-1 text-[10px] text-muted-foreground cursor-pointer"
+                          min={new Date().toISOString().split("T")[0]}
+                          onChange={async (e) => {
+                            if (!e.target.value) return;
+                            await snoozeFollowUp(fu.id, e.target.value);
+                            setFollowUps((prev) =>
+                              prev.map((f) =>
+                                f.id === fu.id ? { ...f, follow_up_date: e.target.value } : f
+                              )
+                            );
+                          }}
+                          title="Snooze to a different date"
+                        />
+                        <span className="text-muted-foreground text-xs capitalize">
+                          {fu.status}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-muted-foreground text-sm">{fu.role}</p>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs text-amber-400">
-                      {fu.follow_up_date}
-                    </span>
-                    <span className="text-muted-foreground text-xs capitalize">
-                      {fu.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

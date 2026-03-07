@@ -74,42 +74,61 @@ Format each as ready-to-copy text.
     return response.choices[0].message.content
 
 def generate_follow_up(client, company_name, role_title, days_since_applied,
-                       original_platform="LinkedIn", profile_text=""):
+                       original_platform="LinkedIn", profile_text="",
+                       follow_up_number=1):
     """Generate a follow-up message after no response."""
     sender_profile = profile_text or _get_profile_text()
 
-    prompt = f"""Write a follow-up message for a job application.
+    # Escalating tone based on follow-up number
+    if follow_up_number >= 3:
+        tone_directive = "Tone: direct and final. This is the LAST follow-up. Signal that you're closing the loop — e.g. 'last note before I move on' or 'closing the loop on this'. No desperation, just professional finality."
+    elif follow_up_number == 2:
+        tone_directive = "Tone: confident with a brief value-add. Mention one specific skill or project that's relevant to the role as a secondary hook, but keep the follow-up framing dominant."
+    else:
+        tone_directive = "Tone: polite and professional check-in. Keep it simple — reference the application and ask about status. No value-add needed."
+
+    system_msg = f"""You write ultra-short follow-up messages for job applications.
+The sender has ALREADY applied — this is NOT a cold outreach or pitch.
+{tone_directive}
+CRITICAL: The message will be sent via LinkedIn connection request which has a 300 character limit. Every message MUST be under 300 characters."""
+
+    prompt = f"""Write follow-up #{follow_up_number} for my existing job application.
 
 CONTEXT:
-- Applied to {company_name} for {role_title} role {days_since_applied} days ago
+- I applied to {company_name} for the {role_title} role {days_since_applied} days ago
 - No response yet
+- This is follow-up attempt #{follow_up_number} of 3
 - Platform: {original_platform}
 
-SENDER PROFILE:
+MY PROFILE (for the optional value-add only — use ONLY if follow-up #2):
 {sender_profile}
 
-RULES:
-1. Keep it under 60 words
-2. Don't be apologetic or desperate
-3. Add ONE new piece of value (a relevant insight, a new project update, or a specific idea for their product)
-   The "new piece of value" should be one of these based on what's relevant to the company:
-   - A specific feature of my Agentic RAG project that solves their problem
-   - A metric from PathToPR (hours to minutes automation) or BCT Notes (2.2M views, 904% growth)
-   - A brief insight about their product showing I've used it
-   Do NOT repeat the same value-add from the original application.
-4. Make it easy to respond to (yes/no question or simple ask)
-5. No "just following up" or "circling back" — those are instant deletes
+MESSAGE STRUCTURE (follow this order):
+1. Reference the original application — mention the role and timeframe briefly
+2. (Follow-up #2 only) One short clause of new value if it fits within the limit
+3. Close with a simple ask about application status or next steps
 
-Generate 1 follow-up message, ready to copy.
+RULES:
+- MUST be under 300 characters total (this is a LinkedIn connection request limit)
+- This is a FOLLOW-UP, not a cold DM. Do NOT pitch yourself from scratch.
+- Do NOT open with project descriptions or technical capabilities
+- No "just following up", "circling back", or "I hope this finds you well"
+- No greetings like "Hi [Name]" — keep every character for content
+- Do NOT mention Canada, immigration, or PR goals
+
+Generate 1 follow-up message, ready to copy. Output ONLY the message text, nothing else.
 """
-    
+
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": prompt}],
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": prompt},
+        ],
         temperature=0.7,
         max_tokens=300
     )
-    
+
     return response.choices[0].message.content
 
 def generate_cover_letter(client, company_name, role_title, job_description,

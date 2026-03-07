@@ -85,7 +85,9 @@ def update_status(app_id, new_status):
             next_date = base + timedelta(days=APPLICATION_CADENCE[count])
             update_data["follow_up_date"] = next_date.strftime("%Y-%m-%d")
         else:
+            # Cadence exhausted — auto-mark as Ghosted
             update_data["follow_up_date"] = None
+            update_data["status"] = "Ghosted"
     elif new_status == "Interview":
         update_data["follow_up_date"] = (
             datetime.now() + timedelta(days=INTERVIEW_FOLLOW_UP_DAYS)
@@ -117,6 +119,8 @@ def get_follow_ups_due():
         return df
     df = df[~df["status"].isin(TERMINAL_STATUSES)]
     df = df[df["follow_up_date"].notna() & (df["follow_up_date"] != "")]
+    # Sort by urgency: most overdue first
+    df = df.sort_values("follow_up_date", ascending=True)
     return df
 
 
@@ -175,6 +179,14 @@ def get_stats():
 def delete_application(app_id):
     db = _get_client()
     db.table("applications").delete().eq("id", app_id).execute()
+
+
+def snooze_follow_up(app_id, new_date):
+    """Reschedule a follow-up to a custom date without changing status or count."""
+    db = _get_client()
+    db.table("applications").update(
+        {"follow_up_date": new_date}
+    ).eq("id", app_id).execute()
 
 
 # ===================== SCRAPED JOBS FUNCTIONS =====================
@@ -379,7 +391,9 @@ def update_referral_status(referral_id, new_status):
             next_date = datetime.now() + timedelta(days=REFERRAL_CADENCE[count])
             update_data["follow_up_date"] = next_date.strftime("%Y-%m-%d")
         else:
+            # Cadence exhausted — auto-mark as Ghosted
             update_data["follow_up_date"] = None
+            update_data["status"] = "Ghosted"
 
     try:
         db.table("referrals").update(update_data).eq("id", referral_id).execute()
@@ -450,6 +464,14 @@ def log_follow_up(entity_type, entity_id, message_content="", channel=""):
             .eq("entity_id", entity_id)
             .execute())
     follow_up_number = len(resp.data) + 1
+
+    # Auto-mark all prior pending follow-ups as "no_response"
+    (db.table("follow_up_history")
+     .update({"follow_up_outcome": "no_response"})
+     .eq("entity_type", entity_type)
+     .eq("entity_id", entity_id)
+     .eq("follow_up_outcome", "pending")
+     .execute())
 
     db.table("follow_up_history").insert({
         "entity_type": entity_type,

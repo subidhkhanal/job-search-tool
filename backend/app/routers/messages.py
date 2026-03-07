@@ -49,6 +49,7 @@ def follow_up(
         role_title=body.role,
         days_since_applied=body.days,
         original_platform=body.platform,
+        follow_up_number=body.follow_up_number,
     )
     return {"content": content}
 

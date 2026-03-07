@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Query
 from typing import Optional
 
-from ..models.schemas import AddApplicationRequest, UpdateStatusRequest, UpdateNotesRequest
+from ..models.schemas import AddApplicationRequest, UpdateStatusRequest, UpdateNotesRequest, SnoozeRequest
 from tracker import (
     add_application,
     delete_application,
     get_all_applications,
     update_status,
     update_notes,
+    snooze_follow_up,
 )
 
 router = APIRouter()
@@ -68,6 +69,12 @@ def patch_notes(
 
 ):
     update_notes(app_id, body.notes)
+    return {"success": True}
+
+
+@router.patch("/{app_id}/snooze")
+def snooze(app_id: int, body: SnoozeRequest):
+    snooze_follow_up(app_id, body.new_date)
     return {"success": True}
 
 

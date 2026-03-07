@@ -131,6 +131,7 @@ export interface FollowUpRequest {
   role: string;
   days?: number;
   platform?: string;
+  follow_up_number?: number;
 }
 
 export interface CoverLetterRequest {

@@ -70,6 +70,10 @@ class UpdateNotesRequest(BaseModel):
     notes: str
 
 
+class SnoozeRequest(BaseModel):
+    new_date: str
+
+
 # ---- Scraped Jobs ----
 
 class MarkScrapedJobRequest(BaseModel):
@@ -91,6 +95,7 @@ class FollowUpRequest(BaseModel):
     role: str
     days: int = 7
     platform: str = "LinkedIn"
+    follow_up_number: int = 1
 
 
 class CoverLetterRequest(BaseModel):

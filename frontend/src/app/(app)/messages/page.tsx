@@ -79,11 +79,13 @@ function MessagesPageInner() {
     const company = searchParams.get("company");
     const role = searchParams.get("role");
     const days = searchParams.get("days");
+    const followUpNumber = searchParams.get("follow_up_number");
     if (type) setMessageType(type);
     const prefill: Record<string, string> = {};
     if (company) prefill.company = company;
     if (role) prefill.role = role;
     if (days) prefill.days = days;
+    if (followUpNumber) prefill.follow_up_number = followUpNumber;
     if (Object.keys(prefill).length > 0) setFormData(prefill);
   }, [searchParams]);
 
@@ -123,6 +125,9 @@ function MessagesPageInner() {
             role: formData.role || "",
             days: formData.days ? parseInt(formData.days, 10) : 7,
             platform: formData.platform || undefined,
+            follow_up_number: formData.follow_up_number
+              ? parseInt(formData.follow_up_number, 10)
+              : 1,
           });
           break;
         case "cover-letter":
@@ -307,6 +312,22 @@ function MessagesPageInner() {
                 value={formData.days || "7"}
                 onChange={(e) => updateField("days", e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="follow_up_number">Follow-up # (1 = gentle, 2 = value-add, 3 = final)</Label>
+              <Select
+                value={formData.follow_up_number || "1"}
+                onValueChange={(v) => updateField("follow_up_number", v)}
+              >
+                <SelectTrigger id="follow_up_number">
+                  <SelectValue placeholder="Select attempt" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">#1 — Polite check-in</SelectItem>
+                  <SelectItem value="2">#2 — With value-add</SelectItem>
+                  <SelectItem value="3">#3 — Final follow-up</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="platform">Platform</Label>
