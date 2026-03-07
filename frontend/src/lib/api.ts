@@ -12,8 +12,11 @@ import type {
   DashboardStats,
   DemoOutreachRequest,
   FollowUp,
+  FollowUpEffectiveness,
+  FollowUpHistory,
   FollowUpRequest,
   FullAnalyzeRequest,
+  LogFollowUpRequest,
   MessageResponse,
   MiniDemo,
   PlatformEffectiveness,
@@ -231,6 +234,34 @@ export async function getReferralStats(): Promise<ReferralStats> {
 
 export async function getReferralFollowUps(): Promise<Referral[]> {
   return apiFetch<Referral[]>("/api/referrals/follow-ups");
+}
+
+// ---- Follow-up History ----
+export async function logFollowUp(data: LogFollowUpRequest) {
+  return apiFetch<{ success: boolean; follow_up_number: number }>("/api/follow-ups/log", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getFollowUpHistory(
+  entityType: string,
+  entityId: number,
+): Promise<FollowUpHistory[]> {
+  return apiFetch<FollowUpHistory[]>(
+    `/api/follow-ups/history?entity_type=${entityType}&entity_id=${entityId}`,
+  );
+}
+
+export async function updateFollowUpOutcome(historyId: number, outcome: string) {
+  return apiFetch<{ success: boolean }>(`/api/follow-ups/${historyId}/outcome`, {
+    method: "PATCH",
+    body: JSON.stringify({ outcome }),
+  });
+}
+
+export async function getFollowUpEffectiveness(): Promise<FollowUpEffectiveness> {
+  return apiFetch<FollowUpEffectiveness>("/api/follow-ups/effectiveness");
 }
 
 // ---- Mini Demos ----

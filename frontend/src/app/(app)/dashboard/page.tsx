@@ -8,10 +8,12 @@ import {
   getPlatformEffectiveness,
   getStatusFunnel,
   getRoleAnalysis,
+  getFollowUpEffectiveness,
 } from "@/lib/api";
 import type {
   DashboardStats,
   FollowUp,
+  FollowUpEffectiveness,
   WeeklyTrend,
   PlatformEffectiveness,
   StatusFunnel,
@@ -25,6 +27,7 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -45,6 +48,7 @@ import {
   AlertTriangle,
   TrendingUp,
   Moon,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -58,6 +62,7 @@ export default function DashboardPage() {
   const [platformData, setPlatformData] = useState<PlatformEffectiveness[]>([]);
   const [statusFunnel, setStatusFunnel] = useState<StatusFunnel | null>(null);
   const [roleAnalysis, setRoleAnalysis] = useState<RoleAnalysis[]>([]);
+  const [effectiveness, setEffectiveness] = useState<FollowUpEffectiveness | null>(null);
 
   useEffect(() => {
     async function fetchAll() {
@@ -69,6 +74,7 @@ export default function DashboardPage() {
           platformRes,
           statusFunnelRes,
           roleAnalysisRes,
+          effectivenessRes,
         ] = await Promise.allSettled([
           getDashboard(),
           getFollowUps(),
@@ -76,6 +82,7 @@ export default function DashboardPage() {
           getPlatformEffectiveness(),
           getStatusFunnel(),
           getRoleAnalysis(),
+          getFollowUpEffectiveness(),
         ]);
 
         if (dashboardRes.status === "fulfilled") setStats(dashboardRes.value);
@@ -84,6 +91,7 @@ export default function DashboardPage() {
         if (platformRes.status === "fulfilled") setPlatformData(Array.isArray(platformRes.value) ? platformRes.value : []);
         if (statusFunnelRes.status === "fulfilled" && statusFunnelRes.value && typeof statusFunnelRes.value === "object") setStatusFunnel(statusFunnelRes.value);
         if (roleAnalysisRes.status === "fulfilled") setRoleAnalysis(Array.isArray(roleAnalysisRes.value) ? roleAnalysisRes.value : []);
+        if (effectivenessRes.status === "fulfilled") setEffectiveness(effectivenessRes.value);
       } catch (err) {
         console.error("Failed to load dashboard data", err);
       } finally {
@@ -229,7 +237,14 @@ export default function DashboardPage() {
                   key={fu.id}
                   className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 space-y-1"
                 >
-                  <p className="font-semibold">{fu.company}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold">{fu.company}</p>
+                    {(fu.follow_up_count ?? 0) > 0 && (
+                      <Badge variant="outline" className="text-[10px] h-5 bg-amber-500/10 text-amber-400 border-amber-500/30">
+                        #{(fu.follow_up_count ?? 0) + 1} of 3
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-muted-foreground text-sm">{fu.role}</p>
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-xs text-amber-400">
@@ -245,6 +260,69 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ---- Follow-up Effectiveness ---- */}
+      {effectiveness && effectiveness.overall.total > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-blue-400" />
+              Follow-up Effectiveness
+            </CardTitle>
+            <CardDescription>
+              Response rates from your follow-up messages.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <p className="text-3xl font-bold">{effectiveness.overall.rate}%</p>
+                <p className="text-xs text-muted-foreground">Response Rate</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold">{effectiveness.overall.total}</p>
+                <p className="text-xs text-muted-foreground">Total Sent</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold text-emerald-400">{effectiveness.overall.responded}</p>
+                <p className="text-xs text-muted-foreground">Responded</p>
+              </div>
+            </div>
+            {effectiveness.by_channel.length > 1 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">By Channel</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {effectiveness.by_channel.map((ch) => (
+                      <div key={ch.channel} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                        <span>{ch.channel}</span>
+                        <span className="text-muted-foreground">{ch.responded}/{ch.total} ({ch.rate}%)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+            {effectiveness.by_number.length > 1 && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">By Attempt</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {effectiveness.by_number.map((n) => (
+                      <div key={n.follow_up_number} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                        <span>Follow-up #{n.follow_up_number}</span>
+                        <span className="text-muted-foreground">{n.rate}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Separator />
 

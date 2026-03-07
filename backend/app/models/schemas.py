@@ -165,6 +165,19 @@ class UpdateReferralStatusRequest(BaseModel):
     status: str
 
 
+# ---- Follow-up History ----
+
+class LogFollowUpRequest(BaseModel):
+    entity_type: str   # "application" or "referral"
+    entity_id: int
+    message_content: str = ""
+    channel: str = ""
+
+
+class UpdateFollowUpOutcomeRequest(BaseModel):
+    outcome: str       # "pending", "responded", "no_response"
+
+
 # ---- Mini Demos ----
 
 class AddDemoRequest(BaseModel):

@@ -11,8 +11,10 @@ import {
   getDemos,
   createDemo,
   updateDemo,
+  getFollowUpHistory,
+  updateFollowUpOutcome,
 } from "@/lib/api";
-import type { Application, MiniDemo } from "@/lib/types";
+import type { Application, MiniDemo, FollowUpHistory } from "@/lib/types";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -80,6 +82,7 @@ import {
   Mail,
   Check,
   X as XIcon,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -186,6 +189,43 @@ export default function TrackerPage() {
   const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
   const [noteText, setNoteText] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+
+  // ---- Follow-up history ----
+  const [historyAppId, setHistoryAppId] = useState<number | null>(null);
+  const [historyRecords, setHistoryRecords] = useState<FollowUpHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  async function toggleHistory(appId: number) {
+    if (historyAppId === appId) {
+      setHistoryAppId(null);
+      setHistoryRecords([]);
+      return;
+    }
+    setHistoryAppId(appId);
+    setHistoryLoading(true);
+    try {
+      const records = await getFollowUpHistory("application", appId);
+      setHistoryRecords(records);
+    } catch {
+      toast.error("Failed to load follow-up history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  async function handleOutcomeChange(historyId: number, outcome: string) {
+    try {
+      await updateFollowUpOutcome(historyId, outcome);
+      setHistoryRecords((prev) =>
+        prev.map((r) =>
+          r.id === historyId ? { ...r, follow_up_outcome: outcome as FollowUpHistory["follow_up_outcome"] } : r
+        )
+      );
+      toast.success("Outcome updated");
+    } catch {
+      toast.error("Failed to update outcome");
+    }
+  }
 
   // ---- Mini Demos state ----
   const [demos, setDemos] = useState<MiniDemo[]>([]);
@@ -676,6 +716,11 @@ export default function TrackerPage() {
                             {app.role}
                           </span>
                           <Badge variant="secondary">{app.platform}</Badge>
+                          {(app.follow_up_count ?? 0) > 0 && (
+                            <Badge variant="outline" className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/30">
+                              {app.follow_up_count}/3 follow-ups
+                            </Badge>
+                          )}
                         </div>
                       </CollapsibleTrigger>
 
@@ -847,6 +892,77 @@ export default function TrackerPage() {
                           </p>
                         ) : (
                           <p className="text-muted-foreground/50 italic">No notes yet</p>
+                        )}
+                      </div>
+
+                      {/* Follow-up History */}
+                      <div className="text-sm">
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="text-muted-foreground">Follow-up History</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            onClick={() => toggleHistory(app.id)}
+                          >
+                            <History className="h-3 w-3 mr-1" />
+                            {historyAppId === app.id ? "Hide" : "Show"}
+                          </Button>
+                        </div>
+                        {historyAppId === app.id && (
+                          <div className="space-y-2">
+                            {historyLoading ? (
+                              <div className="flex items-center gap-2 py-2">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span className="text-muted-foreground text-xs">Loading...</span>
+                              </div>
+                            ) : historyRecords.length === 0 ? (
+                              <p className="text-muted-foreground/50 italic text-xs">No follow-ups sent yet</p>
+                            ) : (
+                              <div className="rounded-md border">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead className="text-xs h-8">#</TableHead>
+                                      <TableHead className="text-xs h-8">Channel</TableHead>
+                                      <TableHead className="text-xs h-8">Sent</TableHead>
+                                      <TableHead className="text-xs h-8">Message</TableHead>
+                                      <TableHead className="text-xs h-8">Outcome</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {historyRecords.map((rec) => (
+                                      <TableRow key={rec.id}>
+                                        <TableCell className="text-xs py-1.5">{rec.follow_up_number}</TableCell>
+                                        <TableCell className="text-xs py-1.5">{rec.channel || "—"}</TableCell>
+                                        <TableCell className="text-xs py-1.5">
+                                          {new Date(rec.sent_at).toLocaleDateString()}
+                                        </TableCell>
+                                        <TableCell className="text-xs py-1.5 max-w-[200px] truncate" title={rec.message_content}>
+                                          {rec.message_content ? rec.message_content.slice(0, 60) + (rec.message_content.length > 60 ? "..." : "") : "—"}
+                                        </TableCell>
+                                        <TableCell className="text-xs py-1.5">
+                                          <Select
+                                            value={rec.follow_up_outcome}
+                                            onValueChange={(v) => handleOutcomeChange(rec.id, v)}
+                                          >
+                                            <SelectTrigger className="h-6 w-[110px] text-xs">
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="pending">Pending</SelectItem>
+                                              <SelectItem value="responded">Responded</SelectItem>
+                                              <SelectItem value="no_response">No Response</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
 

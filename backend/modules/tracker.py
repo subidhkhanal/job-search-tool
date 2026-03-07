@@ -8,6 +8,13 @@ import os
 import pandas as pd
 from datetime import datetime, timedelta
 from supabase import create_client
+import json
+
+# --- Follow-up cadence (global defaults) ---
+APPLICATION_CADENCE = [7, 14, 21]   # days from date_applied
+REFERRAL_CADENCE = [5, 10, 15]      # days from last_contacted
+INTERVIEW_FOLLOW_UP_DAYS = 3
+TERMINAL_STATUSES = ["Offer", "Rejected", "Ghosted", "Not Interested"]
 
 # --- Supabase client (lazy singleton) ---
 _supabase_client = None
@@ -62,7 +69,29 @@ def add_application(company, role, job_type, platform, url="",
 
 def update_status(app_id, new_status):
     db = _get_client()
-    db.table("applications").update({"status": new_status}).eq("id", app_id).execute()
+    update_data = {"status": new_status}
+
+    if new_status in TERMINAL_STATUSES:
+        update_data["follow_up_date"] = None
+    elif new_status == "Follow-up Sent":
+        resp = (db.table("applications")
+                .select("follow_up_count, date_applied")
+                .eq("id", app_id).single().execute())
+        app = resp.data
+        count = (app.get("follow_up_count") or 0) + 1
+        update_data["follow_up_count"] = count
+        if count < len(APPLICATION_CADENCE):
+            base = datetime.strptime(app["date_applied"], "%Y-%m-%d")
+            next_date = base + timedelta(days=APPLICATION_CADENCE[count])
+            update_data["follow_up_date"] = next_date.strftime("%Y-%m-%d")
+        else:
+            update_data["follow_up_date"] = None
+    elif new_status == "Interview":
+        update_data["follow_up_date"] = (
+            datetime.now() + timedelta(days=INTERVIEW_FOLLOW_UP_DAYS)
+        ).strftime("%Y-%m-%d")
+
+    db.table("applications").update(update_data).eq("id", app_id).execute()
 
 
 def update_notes(app_id, notes):
@@ -82,9 +111,13 @@ def get_follow_ups_due():
     resp = (db.table("applications")
             .select("*")
             .lte("follow_up_date", today)
-            .eq("status", "Applied")
             .execute())
-    return pd.DataFrame(resp.data)
+    df = pd.DataFrame(resp.data)
+    if df.empty:
+        return df
+    df = df[~df["status"].isin(TERMINAL_STATUSES)]
+    df = df[df["follow_up_date"].notna() & (df["follow_up_date"] != "")]
+    return df
 
 
 def get_stats():
@@ -328,12 +361,26 @@ def add_referral(contact_name, company, contact_role="", relationship="",
 
 def update_referral_status(referral_id, new_status):
     db = _get_client()
+    referral_terminal = ["Referral Given", "Applied via Referral", "Interview", "Offer"]
     update_data = {"status": new_status}
-    if new_status == "Contacted":
+
+    if new_status in referral_terminal:
+        update_data["follow_up_date"] = None
+    elif new_status == "Contacted":
         today = datetime.now().strftime("%Y-%m-%d")
-        follow_up = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%d")
+        resp = (db.table("referrals")
+                .select("follow_up_count")
+                .eq("id", referral_id).single().execute())
+        ref = resp.data
+        count = (ref.get("follow_up_count") or 0) + 1
         update_data["last_contacted"] = today
-        update_data["follow_up_date"] = follow_up
+        update_data["follow_up_count"] = count
+        if count < len(REFERRAL_CADENCE):
+            next_date = datetime.now() + timedelta(days=REFERRAL_CADENCE[count])
+            update_data["follow_up_date"] = next_date.strftime("%Y-%m-%d")
+        else:
+            update_data["follow_up_date"] = None
+
     try:
         db.table("referrals").update(update_data).eq("id", referral_id).execute()
     except Exception:
@@ -389,6 +436,93 @@ def get_referrals_by_company(company):
         return pd.DataFrame(resp.data)
     except Exception:
         return pd.DataFrame()
+
+
+# ===================== FOLLOW-UP HISTORY =====================
+
+
+def log_follow_up(entity_type, entity_id, message_content="", channel=""):
+    db = _get_client()
+    # Determine follow_up_number from existing history
+    resp = (db.table("follow_up_history")
+            .select("id")
+            .eq("entity_type", entity_type)
+            .eq("entity_id", entity_id)
+            .execute())
+    follow_up_number = len(resp.data) + 1
+
+    db.table("follow_up_history").insert({
+        "entity_type": entity_type,
+        "entity_id": int(entity_id),
+        "message_content": message_content,
+        "channel": channel,
+        "follow_up_number": follow_up_number,
+        "follow_up_outcome": "pending",
+    }).execute()
+    return follow_up_number
+
+
+def get_follow_up_history(entity_type, entity_id):
+    db = _get_client()
+    resp = (db.table("follow_up_history")
+            .select("*")
+            .eq("entity_type", entity_type)
+            .eq("entity_id", entity_id)
+            .order("sent_at", desc=True)
+            .execute())
+    return resp.data
+
+
+def update_follow_up_outcome(history_id, outcome):
+    db = _get_client()
+    db.table("follow_up_history").update(
+        {"follow_up_outcome": outcome}
+    ).eq("id", history_id).execute()
+
+
+def get_follow_up_effectiveness():
+    db = _get_client()
+    resp = db.table("follow_up_history").select("*").execute()
+    rows = resp.data
+    if not rows:
+        return {
+            "by_channel": [],
+            "by_number": [],
+            "overall": {"total": 0, "responded": 0, "rate": 0},
+        }
+
+    df = pd.DataFrame(rows)
+    total = len(df)
+    responded = len(df[df["follow_up_outcome"] == "responded"])
+    overall_rate = round(responded / total * 100, 1) if total else 0
+
+    by_channel = []
+    for channel, group in df.groupby("channel"):
+        ch_total = len(group)
+        ch_responded = len(group[group["follow_up_outcome"] == "responded"])
+        by_channel.append({
+            "channel": channel,
+            "total": ch_total,
+            "responded": ch_responded,
+            "rate": round(ch_responded / ch_total * 100, 1) if ch_total else 0,
+        })
+
+    by_number = []
+    for num, group in df.groupby("follow_up_number"):
+        n_total = len(group)
+        n_responded = len(group[group["follow_up_outcome"] == "responded"])
+        by_number.append({
+            "follow_up_number": int(num),
+            "total": n_total,
+            "responded": n_responded,
+            "rate": round(n_responded / n_total * 100, 1) if n_total else 0,
+        })
+
+    return {
+        "by_channel": by_channel,
+        "by_number": sorted(by_number, key=lambda x: x["follow_up_number"]),
+        "overall": {"total": total, "responded": responded, "rate": overall_rate},
+    }
 
 
 # ===================== COMPANY RESEARCH CACHE =====================

@@ -13,6 +13,7 @@ export interface Application {
   status: string;
   date_applied?: string;
   follow_up_date?: string;
+  follow_up_count?: number;
 }
 
 export interface AddApplicationRequest {
@@ -45,6 +46,31 @@ export interface FollowUp {
   follow_up_date: string;
   status: string;
   platform?: string;
+  follow_up_count?: number;
+}
+
+export interface FollowUpHistory {
+  id: number;
+  entity_type: "application" | "referral";
+  entity_id: number;
+  message_content: string;
+  channel: string;
+  follow_up_number: number;
+  follow_up_outcome: "pending" | "responded" | "no_response";
+  sent_at: string;
+}
+
+export interface FollowUpEffectiveness {
+  by_channel: { channel: string; total: number; responded: number; rate: number }[];
+  by_number: { follow_up_number: number; total: number; responded: number; rate: number }[];
+  overall: { total: number; responded: number; rate: number };
+}
+
+export interface LogFollowUpRequest {
+  entity_type: string;
+  entity_id: number;
+  message_content?: string;
+  channel?: string;
 }
 
 export interface WeeklyTrend {

@@ -13,6 +13,7 @@ from .config import get_settings
 from .routers import (
     applications,
     company_research,
+    follow_ups,
     jd_analyzer,
     messages,
     mini_demos,
@@ -54,6 +55,7 @@ app.include_router(referrals.router, prefix="/api/referrals", tags=["Referrals"]
 app.include_router(mini_demos.router, prefix="/api/demos", tags=["Mini Demos"])
 app.include_router(profile.router, prefix="/api/profile", tags=["Profile"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(follow_ups.router, prefix="/api/follow-ups", tags=["Follow-ups"])
 
 
 @app.get("/api/vapid-public-key")

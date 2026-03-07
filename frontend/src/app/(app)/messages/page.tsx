@@ -10,7 +10,7 @@ import {
   generateReferralRequest,
   generateDemoOutreach,
   getApplications,
-  updateApplicationStatus,
+  logFollowUp,
 } from "@/lib/api";
 import type { Application } from "@/lib/types";
 import {
@@ -190,12 +190,17 @@ function MessagesPageInner() {
     if (!selectedAppId) return;
     setLoggingFollowUp(true);
     try {
-      await updateApplicationStatus(selectedAppId, "Follow-up Sent");
-      toast.success("Logged as Follow-up Sent");
+      const resp = await logFollowUp({
+        entity_type: "application",
+        entity_id: selectedAppId,
+        message_content: result,
+        channel: formData.platform || "LinkedIn",
+      });
+      toast.success(`Follow-up #${resp.follow_up_number} logged`);
       setLogged(true);
       setShowLogDialog(false);
     } catch {
-      toast.error("Failed to update status.");
+      toast.error("Failed to log follow-up.");
     } finally {
       setLoggingFollowUp(false);
     }
