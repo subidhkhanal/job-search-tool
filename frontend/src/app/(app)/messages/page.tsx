@@ -10,6 +10,7 @@ import {
   generateReferralRequest,
   generateDemoOutreach,
   getApplications,
+  getFollowUpHistory,
   logFollowUp,
 } from "@/lib/api";
 import type { Application } from "@/lib/types";
@@ -119,17 +120,44 @@ function MessagesPageInner() {
             project_link: formData.project_link || undefined,
           });
           break;
-        case "follow-up":
+        case "follow-up": {
+          const followUpNum = formData.follow_up_number
+            ? parseInt(formData.follow_up_number, 10)
+            : 1;
+          let previousMessages: string[] | undefined;
+          if (followUpNum > 1) {
+            try {
+              const apps = await getApplications();
+              const match = apps.find(
+                (a) =>
+                  a.company.toLowerCase() ===
+                  (formData.company || "").toLowerCase()
+              );
+              if (match) {
+                const history = await getFollowUpHistory(
+                  "application",
+                  match.id
+                );
+                previousMessages = history
+                  .filter((h) => h.follow_up_number < followUpNum)
+                  .sort((a, b) => a.follow_up_number - b.follow_up_number)
+                  .map((h) => h.message_content)
+                  .filter(Boolean);
+              }
+            } catch {
+              // History fetch failed — generate without it
+            }
+          }
           response = await generateFollowUp({
             company: formData.company || "",
             role: formData.role || "",
             days: formData.days ? parseInt(formData.days, 10) : 7,
             platform: formData.platform || undefined,
-            follow_up_number: formData.follow_up_number
-              ? parseInt(formData.follow_up_number, 10)
-              : 1,
+            follow_up_number: followUpNum,
+            previous_messages: previousMessages,
           });
           break;
+        }
         case "cover-letter":
           response = await generateCoverLetter({
             company: formData.company || "",

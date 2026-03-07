@@ -132,6 +132,7 @@ export interface FollowUpRequest {
   days?: number;
   platform?: string;
   follow_up_number?: number;
+  previous_messages?: string[];
 }
 
 export interface CoverLetterRequest {

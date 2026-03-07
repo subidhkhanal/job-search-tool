@@ -75,22 +75,62 @@ Format each as ready-to-copy text.
 
 def generate_follow_up(client, company_name, role_title, days_since_applied,
                        original_platform="LinkedIn", profile_text="",
-                       follow_up_number=1):
+                       follow_up_number=1, previous_messages=None):
     """Generate a follow-up message after no response."""
     sender_profile = profile_text or _get_profile_text()
 
-    # Escalating tone based on follow-up number
+    # --- Escalating tone (softened #3 for entry-level) ---
     if follow_up_number >= 3:
-        tone_directive = "Tone: direct and final. This is the LAST follow-up. Signal that you're closing the loop — e.g. 'last note before I move on' or 'closing the loop on this'. No desperation, just professional finality."
+        tone_directive = "Tone: respectful and final. This is the last follow-up. Keep it brief — acknowledge they may have gone another direction, and check one last time. No ultimatums or 'moving on' language. Just a clean, professional close."
     elif follow_up_number == 2:
         tone_directive = "Tone: confident with a brief value-add. Mention one specific skill or project that's relevant to the role as a secondary hook, but keep the follow-up framing dominant."
     else:
         tone_directive = "Tone: polite and professional check-in. Keep it simple — reference the application and ask about status. No value-add needed."
 
+    # --- Platform-specific formatting ---
+    if original_platform == "LinkedIn":
+        platform_instructions = "FORMAT: One tight block of text, no greeting, no sign-off. Max 300 characters."
+        char_limit = 300
+        max_tok = 150
+    elif original_platform == "Email":
+        platform_instructions = "FORMAT: Include a short subject line on the first line prefixed with 'Subject: '. Can be 2-3 short paragraphs. Max 500 characters."
+        char_limit = 500
+        max_tok = 400
+    elif original_platform == "Twitter":
+        platform_instructions = "FORMAT: Ultra-short, one sentence. Max 280 characters."
+        char_limit = 280
+        max_tok = 150
+    else:
+        platform_instructions = "FORMAT: One tight block of text. Max 300 characters."
+        char_limit = 300
+        max_tok = 150
+
     system_msg = f"""You write ultra-short follow-up messages for job applications.
 The sender has ALREADY applied — this is NOT a cold outreach or pitch.
 {tone_directive}
-CRITICAL: The message will be sent via LinkedIn connection request which has a 300 character limit. Every message MUST be under 300 characters."""
+{platform_instructions}"""
+
+    # --- Conditional profile (only for #2) ---
+    if follow_up_number == 2:
+        profile_section = f"\nMY PROFILE (pick ONE relevant detail for a brief value-add):\n{sender_profile}\n"
+    else:
+        profile_section = ""
+
+    # --- Previous follow-up history context ---
+    history_section = ""
+    if previous_messages and follow_up_number > 1:
+        history_lines = []
+        for i, msg in enumerate(previous_messages, 1):
+            history_lines.append(f"- Follow-up #{i}: \"{msg}\"")
+        history_section = "\nPREVIOUS FOLLOW-UPS I SENT (do NOT repeat these — build on them, reference them naturally):\n" + "\n".join(history_lines) + "\n"
+
+    # --- One-shot example per follow-up number ---
+    if follow_up_number >= 3:
+        example = 'EXAMPLE (follow-up #3, 198 chars):\n"Reaching out one last time about the ML Engineer Intern role I applied for 3 weeks ago. Completely understand if the team went another direction — just wanted to check before closing the loop."'
+    elif follow_up_number == 2:
+        example = 'EXAMPLE (follow-up #2, 283 chars):\n"Applied for the ML Engineer Intern role 2 weeks ago. Since then I shipped a RAG pipeline with hybrid retrieval that might be relevant to your search stack. Would love to know if the role is still open — happy to share details."'
+    else:
+        example = 'EXAMPLE (follow-up #1, 247 chars):\n"Applied for the ML Engineer Intern role 8 days ago — wanted to check if the team has started reviewing applications. Happy to share anything else that would help. Thanks for your time."'
 
     prompt = f"""Write follow-up #{follow_up_number} for my existing job application.
 
@@ -99,22 +139,20 @@ CONTEXT:
 - No response yet
 - This is follow-up attempt #{follow_up_number} of 3
 - Platform: {original_platform}
-
-MY PROFILE (for the optional value-add only — use ONLY if follow-up #2):
-{sender_profile}
-
+{profile_section}{history_section}
 MESSAGE STRUCTURE (follow this order):
 1. Reference the original application — mention the role and timeframe briefly
 2. (Follow-up #2 only) One short clause of new value if it fits within the limit
 3. Close with a simple ask about application status or next steps
 
 RULES:
-- MUST be under 300 characters total (this is a LinkedIn connection request limit)
 - This is a FOLLOW-UP, not a cold DM. Do NOT pitch yourself from scratch.
 - Do NOT open with project descriptions or technical capabilities
-- No "just following up", "circling back", or "I hope this finds you well"
+- No cliches: "just following up", "circling back", "I hope this finds you well", "I wanted to reach out", "I'm reaching out", "I hope you're doing well", "I trust this message finds you", "I'd love to connect", "at your earliest convenience", "please don't hesitate", "I look forward to hearing from you", "touching base"
 - No greetings like "Hi [Name]" — keep every character for content
 - Do NOT mention Canada, immigration, or PR goals
+
+{example}
 
 Generate 1 follow-up message, ready to copy. Output ONLY the message text, nothing else.
 """
@@ -125,11 +163,24 @@ Generate 1 follow-up message, ready to copy. Output ONLY the message text, nothi
             {"role": "system", "content": system_msg},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.7,
-        max_tokens=300
+        temperature=0.4,
+        max_tokens=max_tok
     )
 
-    return response.choices[0].message.content
+    result = response.choices[0].message.content.strip()
+
+    # --- Post-generation character enforcement ---
+    if len(result) > char_limit:
+        sentences = result.replace("? ", "?|").replace(". ", ".|").replace("! ", "!|").split("|")
+        truncated = ""
+        for s in sentences:
+            if len(truncated + s) <= char_limit:
+                truncated += s + " "
+            else:
+                break
+        result = truncated.strip() or result[:char_limit]
+
+    return result
 
 def generate_cover_letter(client, company_name, role_title, job_description,
                           company_info="", profile_text=""):

@@ -50,6 +50,7 @@ def follow_up(
         days_since_applied=body.days,
         original_platform=body.platform,
         follow_up_number=body.follow_up_number,
+        previous_messages=body.previous_messages,
     )
     return {"content": content}
 

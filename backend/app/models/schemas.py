@@ -96,6 +96,7 @@ class FollowUpRequest(BaseModel):
     days: int = 7
     platform: str = "LinkedIn"
     follow_up_number: int = 1
+    previous_messages: list[str] = []
 
 
 class CoverLetterRequest(BaseModel):
