@@ -88,54 +88,48 @@ def _detect_duration(text):
     return "-"
 
 
-def build_email_content(jobs, sources_status, sources_errors=None):
-    """Build clean markdown table for the email.
+def _job_row(j: dict) -> str:
+    """Build a single markdown table row matching the website card fields."""
+    title   = j.get("title", "Untitled").replace("|", "/").strip()[:50]
+    company = j.get("company", "-").replace("|", "/").strip()[:25]
+    location = j.get("location", "-").replace("|", "/").strip()[:20]
+    score   = j.get("score", 0)
+    verdict = (j.get("verdict") or "-").replace("|", "/").strip()[:15]
+    ats     = j.get("ats_score") or "-"
+    mode    = (j.get("work_mode") or "-").replace("|", "/").strip()[:10]
+    source  = j.get("source", "-").replace("|", "/").strip()[:15]
+    url     = j.get("url", "")
+    link    = f"[Apply]({url})" if url else "-"
+    reason  = (j.get("llm_reason") or "").replace("|", "/").strip()[:80]
+    reason_cell = f"_{reason}_" if reason else "-"
+    return f"| {title} | {company} | {location} | {mode} | {verdict} | {score} | {ats} | {source} | {reason_cell} | {link} |"
 
-    Jobs with `filtered=True` passed the relevance filter (saved to site).
-    Jobs with `filtered=False` were rejected by the filter (email-only).
-    """
+
+_TABLE_HEADER = "| Title | Company | Location | Mode | Verdict | Score | ATS | Source | Reason | Link |"
+_TABLE_SEP    = "|-------|---------|----------|------|---------|-------|-----|--------|--------|------|"
+
+
+def build_email_content(jobs, sources_status, sources_errors=None):
+    """Build markdown table for the email — identical to the website job cards."""
     lines = []
 
     if not jobs:
         lines.append("No new internships found.")
         return "\n".join(lines)
 
-    # Split into filtered (on site) and unfiltered (email-only)
+    # Only show jobs that passed the filter (same as the website)
     filtered_jobs = [j for j in jobs if j.get("filtered", True)]
-    rejected_jobs = [j for j in jobs if not j.get("filtered", True)]
 
-    if filtered_jobs:
-        lines.append(f"### Relevant Jobs ({len(filtered_jobs)})")
-        lines.append("")
-        lines.append("| # | Title | Company | Location | Score | Source | Link |")
-        lines.append("|---|-------|---------|----------|-------|--------|------|")
+    if not filtered_jobs:
+        lines.append("No new internships found.")
+        return "\n".join(lines)
 
-        for idx, j in enumerate(filtered_jobs, 1):
-            title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
-            company = j.get("company", "-").replace("|", "/").strip()[:25]
-            location = j.get("location", "-").replace("|", "/").strip()[:20]
-            score = j.get("score", 0)
-            source = j.get("source", "-").replace("|", "/").strip()[:15]
-            url = j.get("url", "")
-            link = f"[Apply]({url})" if url else "-"
-            lines.append(f"| {idx} | {title} | {company} | {location} | {score} | {source} | {link} |")
-
-    if rejected_jobs:
-        lines.append("")
-        lines.append(f"### Filtered Out ({len(rejected_jobs)}) — review for false negatives")
-        lines.append("")
-        lines.append("| # | Title | Company | Location | Score | Source | Link |")
-        lines.append("|---|-------|---------|----------|-------|--------|------|")
-
-        for idx, j in enumerate(rejected_jobs, 1):
-            title = j.get("title", "Untitled").replace("|", "/").strip()[:50]
-            company = j.get("company", "-").replace("|", "/").strip()[:25]
-            location = j.get("location", "-").replace("|", "/").strip()[:20]
-            score = j.get("score", 0)
-            source = j.get("source", "-").replace("|", "/").strip()[:15]
-            url = j.get("url", "")
-            link = f"[Apply]({url})" if url else "-"
-            lines.append(f"| {idx} | {title} | {company} | {location} | {score} | {source} | {link} |")
+    lines.append(f"### New Jobs ({len(filtered_jobs)})")
+    lines.append("")
+    lines.append(_TABLE_HEADER)
+    lines.append(_TABLE_SEP)
+    for j in filtered_jobs:
+        lines.append(_job_row(j))
 
     return "\n".join(lines)
 
