@@ -6,6 +6,7 @@ Designed to run both locally and in GitHub Actions.
 
 import os
 from datetime import datetime
+from difflib import SequenceMatcher
 from tracker import (
     init_db, save_scraped_job, save_email_log, get_existing_job_urls,
     save_notification, init_notifications_table,
@@ -33,6 +34,150 @@ def _get_blocked_companies():
 # Backward-compatible reference
 BLOCKED_COMPANIES = _DEFAULT_BLOCKED
 
+# Curated list of desired internship titles for fuzzy matching
+DESIRED_TITLES = [
+    "Software Engineer Intern",
+    "AI Engineer Intern",
+    "AI ML Internship",
+    "Generative AI Intern",
+    "Machine Learning Intern",
+    "AI/ML Developer Intern",
+    "Data Science Intern",
+    "Machine Learning Research Intern",
+    "Agentic AI Intern",
+    "Internship - Computer Vision",
+    "Data and AI Engineer Intern",
+    "AI Agent Development Internship",
+    "Data Science & Machine Learning Internship",
+    "AI/ML Intern",
+    "Research Intern – Generative AI Agents",
+    "AI Research Intern",
+    "Generative AI, Agentic AI & AI Agent",
+    "AI/ML Internship Opportunities (Deep Tech AI)",
+    "ML/AI Intern",
+    "AI/ML Engineer",
+    "Machine Learning Engineer Internship",
+    "Data Science Intern (Web Scraper)",
+    "Computer Vision Engineer - Intern",
+    "AI Intern",
+    "Software Engineer - Intern",
+    "AI Agent Development",
+    "AI/ML Product Development Internship (Remote)",
+    "Python Developer Internship",
+    "AI Engineering Internship",
+    "VOICE AI Intern",
+    "Generative AI Fresher",
+    "AI-ML Systems Engineering Internship",
+    "Internship: Machine Learning / AI",
+    "Artificial Intelligence Internship",
+    "LLM Engineer Intern",
+    "RAG Developer Intern",
+    "NLP Engineer Intern",
+    "LangChain Developer Intern",
+    "Python Backend Intern",
+    "FastAPI Developer Intern",
+    "AI Pipeline Engineer Intern",
+    "Prompt Engineer Intern",
+    "Conversational AI Intern",
+    "AI Solutions Engineer Intern",
+    "Applied AI Intern",
+    "AI Product Intern",
+    "GenAI Intern",
+    "GenAI Researcher",
+    "Generative AI Developer Intern",
+    "ML Engineer Intern",
+    "Deep Learning Intern",
+    "NLP Intern",
+    "Document AI Intern",
+    "OCR & Document AI Intern",
+    "AI Chatbot Developer Intern",
+    "Conversational AI Engineer Intern",
+    "MLOps Intern",
+    "AI/ML Research Intern",
+    "Technical Intern - AI/ML",
+    "Intern - Machine Learning (Gen AI)",
+    "AI Research Internship",
+    "Data & AI Intern",
+    "Applied Machine Learning Intern",
+    "AI Backend Intern",
+    "LLM Application Developer Intern",
+    "AI Agent Engineer Intern",
+    "AI Strategy Intern",
+    "AI Trainee",
+    "AI/ML Trainee Engineer",
+    "Predictive Modeling Intern",
+    "AI Video Annotation Intern",
+    "Multimodal AI Intern",
+    "AI Evaluation Intern",
+    "LLM Fine-Tuning Intern",
+    "Machine Learning",
+    "Data Science",
+    "Python Development",
+    "AI & Data Science Intern",
+    "AI ML Intern",
+    "Machine Learning Researcher Intern",
+    "ML Research Intern",
+    "Intern - Generative AI",
+    "Intern, Machine Learning",
+    "Data Scientist Intern",
+    "Intern - AI ML",
+    "Speech Recognition Intern",
+    "Computer Vision Intern",
+    "Research Intern",
+    "Data Science - Intern",
+    "AI/ML Engineering Intern",
+    "AI Intern – LLM & RAG",
+    "Intern, AI/ML Specialist",
+    "Jr. Artificial Intelligence Engineer",
+    "ML Intern",
+    "Internship - Data Science",
+    "GenAI / Document AI Intern",
+    "Engineering Intern – Gen AI",
+    "Research Sciences Intern",
+    "Graduate Intern Technical",
+    "Data Analyst Intern",
+    "Intern - AI Research",
+    "Python Intern",
+    "Large Language Model Engineering Internship",
+    "Backend Engineer Intern",
+    "NLP Research Intern",
+    "Analytics Intern",
+    "IoT Intern",
+    "IoT & AI Intern",
+    "UAV Intern",
+    "Robotics & AI Intern",
+    "Digital Twin Intern",
+    "Optimization Algorithm Intern",
+    "Research Assistant – AI/ML",
+    "Edge Computing Intern",
+    "Simulation Engineer Intern",
+    "AI/ML Research and Development Intern",
+]
+
+# Pre-compute normalized titles for faster matching
+_DESIRED_TITLES_LOWER = [t.lower().strip() for t in DESIRED_TITLES]
+
+
+def _matches_desired_title(job_title, threshold=0.65):
+    """Check if a job title matches or is similar to any desired title."""
+    normalized = job_title.lower().strip()
+    if not normalized:
+        return False
+
+    for desired in _DESIRED_TITLES_LOWER:
+        # Exact match
+        if normalized == desired:
+            return True
+        # Substring match (either direction)
+        if desired in normalized or normalized in desired:
+            return True
+
+    # Fuzzy match — find best similarity score
+    best = max(
+        SequenceMatcher(None, normalized, desired).ratio()
+        for desired in _DESIRED_TITLES_LOWER
+    )
+    return best >= threshold
 
 
 def main():
@@ -62,9 +207,9 @@ def main():
     # Filter blocked companies
     new_jobs = [j for j in new_jobs if j.get("company", "").strip().lower() not in _get_blocked_companies()]
 
-    # Only keep jobs with intern/trainee/apprentice/fresher in the title
-    new_jobs = [j for j in new_jobs if any(kw in j.get("title", "").lower() for kw in ["intern", "trainee", "apprentice", "fresher"])]
-    print(f"After title filter (intern/trainee only): {len(new_jobs)}")
+    # Only keep jobs whose title matches or is similar to the desired titles list
+    new_jobs = [j for j in new_jobs if _matches_desired_title(j.get("title", ""))]
+    print(f"After title filter (desired titles match): {len(new_jobs)}")
 
     # Health check: if LinkedIn scraper returned 0 results, flag it
     linkedin_count = sources_status.get("LinkedIn AI/ML", 0)
