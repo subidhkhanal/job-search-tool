@@ -533,122 +533,6 @@ def scrape_developersindia():
     return jobs
 
 
-_INTERNSHALA_CATEGORIES = [
-    "work-from-home-artificial-intelligence-internship",
-    "work-from-home-machine-learning-internship",
-    "work-from-home-data-science-internship",
-    "work-from-home-python-internship",
-]
-
-_INTERNSHALA_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-    "Accept": "text/html, */*; q=0.01",
-    "X-Requested-With": "XMLHttpRequest",
-    "Referer": "https://internshala.com/internships/",
-}
-
-
-def _parse_internshala_cards(html, seen_urls):
-    """Parse Internshala internship cards from HTML. Returns list of job dicts."""
-    soup = BeautifulSoup(html, "html.parser")
-    jobs = []
-
-    for card in soup.select(".individual_internship"):
-        title_el = card.select_one("h3.job-internship-name a, h3.job-internship-name")
-        company_el = card.select_one(".company-name")
-        location_el = card.select_one(".locations")
-
-        if not title_el:
-            continue
-
-        title = title_el.get_text(strip=True)
-        company = company_el.get_text(strip=True) if company_el else "Unknown"
-        location = location_el.get_text(strip=True) if location_el else "India"
-
-        link = ""
-        link_el = title_el if title_el.name == "a" else card.select_one("a.job-title-href, .company a[href]")
-        if link_el:
-            link = link_el.get("href", "")
-        if link and not link.startswith("http"):
-            link = f"https://internshala.com{link}"
-
-        if link in seen_urls:
-            continue
-        if link:
-            seen_urls.add(link)
-
-        # Extract stipend and duration from row-1 items
-        row_items = card.select(".row-1-item")
-        stipend = ""
-        duration = ""
-        for item in row_items:
-            text = item.get_text(strip=True)
-            if "/month" in text or "/week" in text:
-                stipend = text
-            elif "Month" in text or "Week" in text or "Day" in text:
-                duration = text
-
-        skills = ", ".join(
-            s.get_text(strip=True) for s in card.select(".skill_container")
-        )
-
-        desc_parts = [f"Internship: {title}"]
-        if stipend:
-            desc_parts.append(f"Stipend: {stipend}")
-        if duration:
-            desc_parts.append(f"Duration: {duration}")
-        if skills:
-            desc_parts.append(f"Skills: {skills}")
-
-        job_data = {
-            "title": title[:150],
-            "company": company[:80],
-            "location": location[:80],
-            "source": "Internshala",
-            "url": link,
-            "description": " | ".join(desc_parts)[:500],
-        }
-        jobs.append(job_data)
-
-    return jobs
-
-
-def scrape_internshala():
-    """Scrape Internshala for AI/ML internships via their AJAX endpoint."""
-    seen_urls = set()
-    dedup_map = {}
-    blacklist = _load_blacklist()
-
-    for category in _INTERNSHALA_CATEGORIES:
-        try:
-            ajax_url = f"https://internshala.com/internships_ajax/{category}"
-            resp = _get_with_retry(ajax_url, headers=_INTERNSHALA_HEADERS)
-            data = resp.json()
-
-            html = data.get("internship_list_html", "")
-            if not html:
-                continue
-
-            parsed = _parse_internshala_cards(html, seen_urls)
-            for job in parsed:
-                # Blacklist check
-                if _is_blacklisted(job["company"], blacklist):
-                    continue
-
-                # In-memory dedup by normalized title + company
-                dedup_key = _normalize_for_dedup(job["title"]) + "||" + _normalize_for_dedup(job["company"])
-                if dedup_key in dedup_map:
-                    dedup_map[dedup_key]["match_count"] += 1
-                else:
-                    job["match_count"] = 1
-                    job["scraped_at"] = datetime.now().isoformat()
-                    dedup_map[dedup_key] = job
-
-            time.sleep(2)
-        except Exception as e:
-            print(f"  Internshala error for {category}: {e}")
-
-    return list(dedup_map.values())
 
 
 def scrape_remoteok():
@@ -1016,7 +900,6 @@ def run_all_scrapers():
         ("HN Who's Hiring", scrape_hn_who_is_hiring),
         ("Arbeitnow", scrape_arbeitnow),
         ("LinkedIn AI/ML", scrape_linkedin),
-        ("Internshala", scrape_internshala),
         ("RemoteOK", scrape_remoteok),
         ("Himalayas", scrape_himalayas),
         ("Jobicy", scrape_jobicy),
