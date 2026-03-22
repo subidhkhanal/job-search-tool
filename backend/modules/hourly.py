@@ -136,7 +136,8 @@ DESIRED_TITLES = [
     "AI Intern",
     "Research Assistant – AI/ML",
     "AI/ML Research and Development Intern",
-    "AI Engineer"
+    "AI Engineer",
+    "Artificial Intelligence (AI) Internship"
 ]
 
 # Pre-compute normalized titles for faster matching
