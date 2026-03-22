@@ -6,7 +6,7 @@ Designed to run both locally and in GitHub Actions.
 
 import os
 from datetime import datetime
-from difflib import SequenceMatcher
+from rapidfuzz import fuzz
 from tracker import (
     init_db, save_scraped_job, save_email_log, get_existing_job_urls,
     save_notification, init_notifications_table,
@@ -36,14 +36,18 @@ BLOCKED_COMPANIES = _DEFAULT_BLOCKED
 
 # Curated list of desired internship titles for fuzzy matching
 DESIRED_TITLES = [
+    "Software Engineer Intern",
     "AI Engineer Intern",
     "AI Internship",
     "Generative AI Intern",
+    "Machine Learning Intern",
     "AI/ML Developer Intern",
+    "Machine Learning Research Intern",
     "Agentic AI Intern",
     "Internship - Computer Vision",
     "Data and AI Engineer Intern",
     "AI Agent Development Internship",
+    "Machine Learning Internship",
     "AI/ML Intern",
     "Research Intern – Generative AI Agents",
     "AI Research Intern",
@@ -51,9 +55,12 @@ DESIRED_TITLES = [
     "AI/ML Internship Opportunities (Deep Tech AI)",
     "ML/AI Intern",
     "AI/ML Engineer",
+    "Machine Learning Engineer Internship",
+    "Computer Vision Engineer - Intern",
     "AI Intern",
     "AI Agent Development",
     "AI/ML Product Development Internship (Remote)",
+    "Python Developer Internship",
     "AI Engineering Internship",
     "Generative AI Fresher",
     "AI-ML Systems Engineering Internship",
@@ -61,7 +68,10 @@ DESIRED_TITLES = [
     "Artificial Intelligence Internship",
     "LLM Engineer Intern",
     "RAG Developer Intern",
+    "NLP Engineer Intern",
     "LangChain Developer Intern",
+    "Python Backend Intern",
+    "FastAPI Developer Intern",
     "AI Pipeline Engineer Intern",
     "Prompt Engineer Intern",
     "Conversational AI Intern",
@@ -71,16 +81,19 @@ DESIRED_TITLES = [
     "GenAI Intern",
     "GenAI Researcher",
     "Generative AI Developer Intern",
+    "ML Engineer Intern",
     "Deep Learning Intern",
+    "NLP Intern",
     "Document AI Intern",
     "OCR & Document AI Intern",
     "AI Chatbot Developer Intern",
     "Conversational AI Engineer Intern",
+    "MLOps Intern",
     "AI/ML Research Intern",
     "Technical Intern - AI/ML",
     "Intern - Machine Learning (Gen AI)",
     "AI Research Internship",
-    "Data & AI Intern",
+    "AI Intern",
     "Applied Machine Learning Intern",
     "AI Backend Intern",
     "LLM Application Developer Intern",
@@ -88,50 +101,91 @@ DESIRED_TITLES = [
     "AI Strategy Intern",
     "AI Trainee",
     "AI/ML Trainee Engineer",
+    "Predictive Modeling Intern",
     "Multimodal AI Intern",
     "AI Evaluation Intern",
     "LLM Fine-Tuning Intern",
+    "Machine Learning",
+    "Python Development",
+    "AI Intern",
     "AI ML Intern",
+    "Machine Learning Researcher Intern",
     "ML Research Intern",
     "Intern - Generative AI",
+    "Intern, Machine Learning",
     "Intern - AI ML",
+    "Speech Recognition Intern",
+    "Computer Vision Intern",
     "Research Intern",
+    "Data Science - Intern",
     "AI/ML Engineering Intern",
     "AI Intern – LLM & RAG",
     "Intern, AI/ML Specialist",
     "Jr. Artificial Intelligence Engineer",
+    "ML Intern",
+    "Internship - Data Science",
     "GenAI / Document AI Intern",
     "Engineering Intern – Gen AI",
     "Research Sciences Intern",
     "Graduate Intern Technical",
     "Intern - AI Research",
+    "Python Intern",
     "Large Language Model Engineering Internship",
+    "Backend Engineer Intern",
+    "NLP Research Intern",
     "AI Intern",
     "Research Assistant – AI/ML",
     "AI/ML Research and Development Intern",
+    "AI Engineer"
 ]
 
 # Pre-compute normalized titles for faster matching
 _DESIRED_TITLES_LOWER = [t.lower().strip() for t in DESIRED_TITLES]
 
+# Domain keywords — a job title must contain at least one to be considered relevant
+_DOMAIN_KEYWORDS = {
+    "ai", "ml", "artificial intelligence", "machine learning", "deep learning",
+    "data science", "data scientist", "data analyst", "analytics",
+    "nlp", "natural language", "computer vision", "llm", "large language model",
+    "genai", "generative ai", "agentic", "rag", "langchain",
+    "python", "fastapi", "backend engineer", "software engineer",
+    "mlops", "prompt engineer", "chatbot", "conversational ai",
+    "iot", "robotics", "uav", "digital twin", "edge computing", "simulation",
+    "ocr", "document ai", "speech recognition", "predictive modeling",
+    "optimization algorithm", "multimodal",
+}
 
-def _matches_desired_title(job_title, threshold=0.65):
-    """Check if a job title matches or is similar to any desired title."""
+
+def _matches_desired_title(job_title, threshold=65):
+    """Check if a job title matches any desired title.
+
+    Two-step filter:
+    1. Exact match against the curated list (normalized).
+    2. Domain keyword check + fuzzy match — the title must contain a relevant
+       domain keyword AND score >= threshold via token_sort_ratio against at
+       least one desired title. This prevents false positives like
+       'Market Research Intern' matching 'Research Intern'.
+    """
     normalized = job_title.lower().strip()
     if not normalized:
         return False
 
-    for desired in _DESIRED_TITLES_LOWER:
-        # Exact match
-        if normalized == desired:
-            return True
-        # Substring match (either direction)
-        if desired in normalized or normalized in desired:
-            return True
+    # Reject generic one-word titles
+    if normalized in ("intern", "internship", "trainee"):
+        return False
 
-    # Fuzzy match — find best similarity score
+    # Step 1: exact match
+    if normalized in _DESIRED_TITLES_LOWER:
+        return True
+
+    # Step 2: must contain at least one domain keyword
+    has_domain_keyword = any(kw in normalized for kw in _DOMAIN_KEYWORDS)
+    if not has_domain_keyword:
+        return False
+
+    # Step 3: fuzzy match using token_sort_ratio (penalizes extra/missing words)
     best = max(
-        SequenceMatcher(None, normalized, desired).ratio()
+        fuzz.token_sort_ratio(normalized, desired)
         for desired in _DESIRED_TITLES_LOWER
     )
     return best >= threshold
