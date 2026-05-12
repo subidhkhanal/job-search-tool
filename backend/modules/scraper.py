@@ -60,18 +60,13 @@ INDIA_KEYWORDS = ["india", "noida", "delhi", "bangalore", "bengaluru",
                   "hyderabad", "mumbai", "pune", "chennai", "gurgaon",
                   "gurugram"]
 
-# Allowed locations: India only
-ALLOWED_LOCATION_KEYWORDS = [
-    "india", "noida", "delhi", "bangalore", "bengaluru", "hyderabad",
-    "mumbai", "pune", "chennai", "gurgaon", "gurugram", "kolkata",
-    "jaipur", "ahmedabad", "lucknow",
-]
+# Allowed locations: must mention "india"
+ALLOWED_LOCATION_KEYWORDS = ["india"]
 
 
 def is_allowed_location(text):
-    """Check if job explicitly mentions India or an Indian city."""
-    text_lower = text.lower()
-    return any(kw in text_lower for kw in ALLOWED_LOCATION_KEYWORDS)
+    """Check if job text mentions 'india'."""
+    return "india" in text.lower()
 
 # Priority: Delhi-NCR region (Noida-based, onsite/hybrid preferred)
 NCR_KEYWORDS = ["noida", "delhi", "gurgaon", "gurugram", "ncr",
@@ -95,12 +90,11 @@ def is_internship(text):
 
 
 def is_global_or_india(location_text):
-    """Check if location explicitly mentions India or an Indian city.
+    """Check if location mentions 'india'.
     Empty location is rejected (can't confirm it's India)."""
     if not location_text or not location_text.strip():
         return False
-    text_lower = location_text.lower()
-    return any(kw in text_lower for kw in ALLOWED_LOCATION_KEYWORDS)
+    return "india" in location_text.lower()
 
 
 def scrape_remotive():
