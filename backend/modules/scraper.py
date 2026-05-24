@@ -548,7 +548,7 @@ def _parse_internshala_cards(html, seen_urls):
     jobs = []
 
     for card in soup.select(".individual_internship"):
-        title_el = card.select_one("h3.job-internship-name a, h3.job-internship-name")
+        title_el = card.select_one(".job-internship-name a, .job-internship-name")
         company_el = card.select_one(".company-name")
         location_el = card.select_one(".locations")
 
