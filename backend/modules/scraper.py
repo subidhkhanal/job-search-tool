@@ -848,16 +848,17 @@ def run_all_scrapers():
     sources_errors = {}
 
     scrapers = [
-        ("Remotive", scrape_remotive),
-        ("HN Who's Hiring", scrape_hn_who_is_hiring),
-        ("Arbeitnow", scrape_arbeitnow),
+        # LinkedIn-only mode — re-enable any of these by uncommenting.
+        # ("Remotive", scrape_remotive),
+        # ("HN Who's Hiring", scrape_hn_who_is_hiring),
+        # ("Arbeitnow", scrape_arbeitnow),
         ("LinkedIn AI/ML", scrape_linkedin),
-        ("RemoteOK", scrape_remoteok),
-        ("Himalayas", scrape_himalayas),
-        ("Jobicy", scrape_jobicy),
-        ("The Muse", scrape_themuse),
-        ("Jooble", scrape_jooble),
-        ("Unstop", scrape_unstop),
+        # ("RemoteOK", scrape_remoteok),
+        # ("Himalayas", scrape_himalayas),
+        # ("Jobicy", scrape_jobicy),
+        # ("The Muse", scrape_themuse),
+        # ("Jooble", scrape_jooble),
+        # ("Unstop", scrape_unstop),
     ]
 
     for name, scraper_fn in scrapers:
