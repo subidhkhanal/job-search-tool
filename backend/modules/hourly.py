@@ -34,110 +34,93 @@ def _get_blocked_companies():
 # Backward-compatible reference
 BLOCKED_COMPANIES = _DEFAULT_BLOCKED
 
-# Curated list of desired internship titles for fuzzy matching
+# Curated list of desired AI/ML job titles for fuzzy matching
 DESIRED_TITLES = [
-    "Software Engineer Intern",
-    "AI Engineer Intern",
-    "AI Internship",
-    "Generative AI Intern",
-    "Machine Learning Intern",
-    "AI/ML Developer Intern",
-    "Machine Learning Research Intern",
-    "Agentic AI Intern",
-    "Internship - Computer Vision",
-    "Data and AI Engineer Intern",
-    "AI Agent Development Internship",
-    "Machine Learning Internship",
-    "AI/ML Intern",
-    "Research Intern – Generative AI Agents",
-    "AI Research Intern",
-    "Generative AI, Agentic AI & AI Agent",
-    "AI/ML Internship Opportunities (Deep Tech AI)",
-    "ML/AI Intern",
-    "AI/ML Engineer",
-    "Machine Learning Engineer Internship",
-    "Computer Vision Engineer - Intern",
-    "AI Intern",
-    "AI Agent Development",
-    "AI/ML Product Development Internship (Remote)",
-    "Python Developer Internship",
-    "AI Engineering Internship",
-    "Generative AI Fresher",
-    "AI-ML Systems Engineering Internship",
-    "Internship: Machine Learning / AI",
-    "Artificial Intelligence Internship",
-    "LLM Engineer Intern",
-    "RAG Developer Intern",
-    "NLP Engineer Intern",
-    "LangChain Developer Intern",
-    "Python Backend Intern",
-    "FastAPI Developer Intern",
-    "AI Pipeline Engineer Intern",
-    "Prompt Engineer Intern",
-    "Conversational AI Intern",
-    "AI Solutions Engineer Intern",
-    "Applied AI Intern",
-    "AI Product Intern",
-    "GenAI Intern",
-    "GenAI Researcher",
-    "Generative AI Developer Intern",
-    "ML Engineer Intern",
-    "Deep Learning Intern",
-    "NLP Intern",
-    "Document AI Intern",
-    "OCR & Document AI Intern",
-    "AI Chatbot Developer Intern",
-    "Conversational AI Engineer Intern",
-    "MLOps Intern",
-    "AI/ML Research Intern",
-    "Technical Intern - AI/ML",
-    "Intern - Machine Learning (Gen AI)",
-    "AI Research Internship",
-    "AI Intern",
-    "Applied Machine Learning Intern",
-    "AI Backend Intern",
-    "LLM Application Developer Intern",
-    "AI Agent Engineer Intern",
-    "AI Strategy Intern",
-    "AI Trainee",
-    "AI/ML Trainee Engineer",
-    "Predictive Modeling Intern",
-    "Multimodal AI Intern",
-    "AI Evaluation Intern",
-    "LLM Fine-Tuning Intern",
-    "Machine Learning",
-    "Python Development",
-    "AI Intern",
-    "AI ML Intern",
-    "Machine Learning Researcher Intern",
-    "ML Research Intern",
-    "Intern - Generative AI",
-    "Intern, Machine Learning",
-    "Intern - AI ML",
-    "Speech Recognition Intern",
-    "Computer Vision Intern",
-    "Research Intern",
-    "Data Science - Intern",
-    "AI/ML Engineering Intern",
-    "AI Intern – LLM & RAG",
-    "Intern, AI/ML Specialist",
-    "Jr. Artificial Intelligence Engineer",
-    "ML Intern",
-    "Internship - Data Science",
-    "GenAI / Document AI Intern",
-    "Engineering Intern – Gen AI",
-    "Research Sciences Intern",
-    "Graduate Intern Technical",
-    "Intern - AI Research",
-    "Python Intern",
-    "Large Language Model Engineering Internship",
-    "Backend Engineer Intern",
-    "NLP Research Intern",
-    "AI Intern",
-    "Research Assistant – AI/ML",
-    "AI/ML Research and Development Intern",
+    "Software Engineer",
     "AI Engineer",
-    "Artificial Intelligence (AI) Internship"
+    "Generative AI Engineer",
+    "Machine Learning Engineer",
+    "AI/ML Developer",
+    "Machine Learning Research Engineer",
+    "Agentic AI Engineer",
+    "Computer Vision Engineer",
+    "Data and AI Engineer",
+    "AI Agent Developer",
+    "AI/ML Engineer",
+    "Generative AI Developer",
+    "AI Research Engineer",
+    "Agentic AI Developer",
+    "Deep Tech AI Engineer",
+    "ML Engineer",
+    "Computer Vision Developer",
+    "Python Developer",
+    "AI Engineering Lead",
+    "Generative AI Specialist",
+    "AI-ML Systems Engineer",
+    "Machine Learning Scientist",
+    "Artificial Intelligence Engineer",
+    "LLM Engineer",
+    "RAG Developer",
+    "NLP Engineer",
+    "LangChain Developer",
+    "Python Backend Engineer",
+    "FastAPI Developer",
+    "AI Pipeline Engineer",
+    "Prompt Engineer",
+    "Conversational AI Engineer",
+    "AI Solutions Engineer",
+    "Applied AI Engineer",
+    "AI Product Engineer",
+    "GenAI Engineer",
+    "GenAI Researcher",
+    "Generative AI Developer",
+    "Deep Learning Engineer",
+    "NLP Developer",
+    "Document AI Engineer",
+    "OCR Engineer",
+    "AI Chatbot Developer",
+    "MLOps Engineer",
+    "AI/ML Researcher",
+    "Applied Machine Learning Engineer",
+    "AI Backend Engineer",
+    "LLM Application Developer",
+    "AI Agent Engineer",
+    "Predictive Modeling Engineer",
+    "Multimodal AI Engineer",
+    "LLM Fine-Tuning Engineer",
+    "Machine Learning Developer",
+    "Python Software Engineer",
+    "AI ML Engineer",
+    "Machine Learning Researcher",
+    "ML Researcher",
+    "Generative AI Developer",
+    "Machine Learning Engineer",
+    "AI ML Developer",
+    "Speech Recognition Engineer",
+    "Data Scientist",
+    "AI/ML Engineering Lead",
+    "LLM & RAG Engineer",
+    "AI/ML Specialist",
+    "Junior Artificial Intelligence Engineer",
+    "Junior ML Engineer",
+    "Junior AI Engineer",
+    "Entry Level AI Engineer",
+    "Graduate AI Engineer",
+    "Graduate ML Engineer",
+    "Data Science Engineer",
+    "GenAI Document AI Engineer",
+    "Engineering Lead Gen AI",
+    "Research Scientist",
+    "Graduate Technical Engineer",
+    "AI Research Scientist",
+    "Python Engineer",
+    "Large Language Model Engineer",
+    "Backend Engineer",
+    "NLP Researcher",
+    "Research Assistant AI/ML",
+    "AI/ML Research and Development Engineer",
+    "AI Engineer",
+    "Artificial Intelligence (AI) Engineer",
 ]
 
 # Pre-compute normalized titles for faster matching
@@ -157,34 +140,44 @@ _DOMAIN_KEYWORDS = {
 }
 
 
+# Internship markers — any title containing these is rejected (jobs-only mode)
+_INTERN_REJECT_KEYWORDS = ("intern", "internship", "trainee", "apprentice")
+
+
 def _matches_desired_title(job_title, threshold=65):
     """Check if a job title matches any desired title.
 
-    Two-step filter:
-    1. Exact match against the curated list (normalized).
-    2. Domain keyword check + fuzzy match — the title must contain a relevant
+    Filter pipeline (jobs-only):
+    1. Reject titles containing an internship marker.
+    2. Reject generic one-word titles.
+    3. Exact match against the curated list (normalized).
+    4. Domain keyword check + fuzzy match — the title must contain a relevant
        domain keyword AND score >= threshold via token_sort_ratio against at
        least one desired title. This prevents false positives like
-       'Market Research Intern' matching 'Research Intern'.
+       'Market Research Engineer' matching 'Research Engineer'.
     """
     normalized = job_title.lower().strip()
     if not normalized:
         return False
 
-    # Reject generic one-word titles
-    if normalized in ("intern", "internship", "trainee"):
+    # Step 1: reject internships
+    if any(kw in normalized for kw in _INTERN_REJECT_KEYWORDS):
         return False
 
-    # Step 1: exact match
+    # Step 2: reject generic one-word titles
+    if normalized in ("engineer", "developer", "scientist", "analyst"):
+        return False
+
+    # Step 3: exact match
     if normalized in _DESIRED_TITLES_LOWER:
         return True
 
-    # Step 2: must contain at least one domain keyword
+    # Step 4: must contain at least one domain keyword
     has_domain_keyword = any(kw in normalized for kw in _DOMAIN_KEYWORDS)
     if not has_domain_keyword:
         return False
 
-    # Step 3: fuzzy match using token_sort_ratio (penalizes extra/missing words)
+    # Step 5: fuzzy match using token_sort_ratio (penalizes extra/missing words)
     best = max(
         fuzz.token_sort_ratio(normalized, desired)
         for desired in _DESIRED_TITLES_LOWER
