@@ -5,6 +5,7 @@ Designed to run both locally and in GitHub Actions.
 """
 
 import os
+import re
 from datetime import datetime
 from rapidfuzz import fuzz
 from tracker import (
@@ -36,7 +37,6 @@ BLOCKED_COMPANIES = _DEFAULT_BLOCKED
 
 # Curated list of desired AI/ML job titles for fuzzy matching
 DESIRED_TITLES = [
-    "Software Engineer",
     "AI Engineer",
     "Generative AI Engineer",
     "Machine Learning Engineer",
@@ -54,8 +54,6 @@ DESIRED_TITLES = [
     "ML Engineer",
     "Computer Vision Developer",
     "Python Developer",
-    "AI Engineering Lead",
-    "Generative AI Specialist",
     "AI-ML Systems Engineer",
     "Machine Learning Scientist",
     "Artificial Intelligence Engineer",
@@ -63,7 +61,6 @@ DESIRED_TITLES = [
     "RAG Developer",
     "NLP Engineer",
     "LangChain Developer",
-    "Python Backend Engineer",
     "FastAPI Developer",
     "AI Pipeline Engineer",
     "Prompt Engineer",
@@ -82,14 +79,12 @@ DESIRED_TITLES = [
     "MLOps Engineer",
     "AI/ML Researcher",
     "Applied Machine Learning Engineer",
-    "AI Backend Engineer",
     "LLM Application Developer",
     "AI Agent Engineer",
     "Predictive Modeling Engineer",
     "Multimodal AI Engineer",
     "LLM Fine-Tuning Engineer",
     "Machine Learning Developer",
-    "Python Software Engineer",
     "AI ML Engineer",
     "Machine Learning Researcher",
     "ML Researcher",
@@ -97,25 +92,19 @@ DESIRED_TITLES = [
     "Machine Learning Engineer",
     "AI ML Developer",
     "Speech Recognition Engineer",
-    "Data Scientist",
-    "AI/ML Engineering Lead",
     "LLM & RAG Engineer",
-    "AI/ML Specialist",
     "Junior Artificial Intelligence Engineer",
     "Junior ML Engineer",
     "Junior AI Engineer",
     "Entry Level AI Engineer",
     "Graduate AI Engineer",
     "Graduate ML Engineer",
-    "Data Science Engineer",
     "GenAI Document AI Engineer",
-    "Engineering Lead Gen AI",
     "Research Scientist",
     "Graduate Technical Engineer",
     "AI Research Scientist",
     "Python Engineer",
     "Large Language Model Engineer",
-    "Backend Engineer",
     "NLP Researcher",
     "Research Assistant AI/ML",
     "AI/ML Research and Development Engineer",
@@ -143,15 +132,31 @@ _DOMAIN_KEYWORDS = {
 # Internship markers — any title containing these is rejected (jobs-only mode)
 _INTERN_REJECT_KEYWORDS = ("intern", "internship", "trainee", "apprentice")
 
+# Titles matching any of these (case-insensitive, word-boundary) are rejected:
+# senior/staff/principal/lead levels, Java roles, generic Software Engineer /
+# Data Scientist roles, and mid-level postings.
+_TITLE_REJECT_RE = re.compile(
+    r"\b("
+    r"senior|sr|staff|principal|lead|phd|"
+    r"java|"
+    r"software engineer|data scientist|data science|backend engineer|specialist|"
+    r"mid[\s-]?level"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def _matches_desired_title(job_title, threshold=65):
     """Check if a job title matches any desired title.
 
-    Filter pipeline (jobs-only):
+    Filter pipeline (jobs-only, junior/entry only):
     1. Reject titles containing an internship marker.
-    2. Reject generic one-word titles.
-    3. Exact match against the curated list (normalized).
-    4. Domain keyword check + fuzzy match — the title must contain a relevant
+    2. Reject senior/staff/principal/lead/PhD, Java, Software Engineer,
+       Data Scientist, Backend Engineer, Specialist, and mid-level titles
+       (see _TITLE_REJECT_RE).
+    3. Reject generic one-word titles.
+    4. Exact match against the curated list (normalized).
+    5. Domain keyword check + fuzzy match — the title must contain a relevant
        domain keyword AND score >= threshold via token_sort_ratio against at
        least one desired title. This prevents false positives like
        'Market Research Engineer' matching 'Research Engineer'.
@@ -164,7 +169,11 @@ def _matches_desired_title(job_title, threshold=65):
     if any(kw in normalized for kw in _INTERN_REJECT_KEYWORDS):
         return False
 
-    # Step 2: reject generic one-word titles
+    # Step 2: reject senior/staff/principal/lead, Java, generic SWE/DS, mid-level
+    if _TITLE_REJECT_RE.search(normalized):
+        return False
+
+    # Step 3: reject generic one-word titles
     if normalized in ("engineer", "developer", "scientist", "analyst"):
         return False
 
