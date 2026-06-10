@@ -53,7 +53,6 @@ DESIRED_TITLES = [
     "Deep Tech AI Engineer",
     "ML Engineer",
     "Computer Vision Developer",
-    "Python Developer",
     "AI-ML Systems Engineer",
     "Machine Learning Scientist",
     "Artificial Intelligence Engineer",
@@ -140,6 +139,7 @@ _TITLE_REJECT_RE = re.compile(
     r"senior|sr|staff|principal|lead|phd|"
     r"java|"
     r"software engineer|data scientist|data science|backend engineer|specialist|"
+    r"python developer|"
     r"mid[\s-]?level"
     r")\b",
     re.IGNORECASE,
