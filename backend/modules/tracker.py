@@ -192,11 +192,29 @@ def snooze_follow_up(app_id, new_date):
 # ===================== SCRAPED JOBS FUNCTIONS =====================
 
 def get_existing_job_urls():
-    """Get all URLs already in scraped_jobs table for deduplication."""
+    """Get all URLs already in scraped_jobs table for deduplication.
+
+    Paginates because Supabase caps a single select at 1000 rows; without this
+    the dedup set is incomplete and already-seen jobs get re-emailed every run.
+    """
     try:
         db = _get_client()
-        resp = db.table("scraped_jobs").select("url").execute()
-        return {row["url"] for row in resp.data} if resp.data else set()
+        urls = set()
+        page_size = 1000
+        offset = 0
+        while True:
+            resp = (
+                db.table("scraped_jobs")
+                .select("url")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            batch = resp.data or []
+            urls.update(row["url"] for row in batch if row.get("url"))
+            if len(batch) < page_size:
+                break
+            offset += page_size
+        return urls
     except Exception:
         return set()
 

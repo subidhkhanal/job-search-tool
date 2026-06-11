@@ -43,7 +43,6 @@ DESIRED_TITLES = [
     "AI/ML Developer",
     "Machine Learning Research Engineer",
     "Agentic AI Engineer",
-    "Computer Vision Engineer",
     "Data and AI Engineer",
     "AI Agent Developer",
     "AI/ML Engineer",
@@ -52,7 +51,6 @@ DESIRED_TITLES = [
     "Agentic AI Developer",
     "Deep Tech AI Engineer",
     "ML Engineer",
-    "Computer Vision Developer",
     "AI-ML Systems Engineer",
     "Machine Learning Scientist",
     "Artificial Intelligence Engineer",
@@ -136,10 +134,10 @@ _INTERN_REJECT_KEYWORDS = ("intern", "internship", "trainee", "apprentice")
 # Data Scientist roles, and mid-level postings.
 _TITLE_REJECT_RE = re.compile(
     r"\b("
-    r"senior|sr|staff|principal|lead|phd|"
+    r"senior|sr|staff|principal|lead|phd|distinguished|"
     r"java|"
     r"software engineer|data scientist|data science|backend engineer|specialist|"
-    r"python developer|"
+    r"python developer|python automation engineer|manager|computer vision|"
     r"mid[\s-]?level"
     r")\b",
     re.IGNORECASE,
